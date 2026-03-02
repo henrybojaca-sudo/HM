@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego del Ahorcado</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.0/mammoth.browser.min.js"></script>
+    <style>
+        .hangman-part {
+            stroke: #374151;
+            stroke-width: 4;
+            fill: none;
+            stroke-linecap: round;
+            visibility: hidden;
+        }
+        .gallows {
+            stroke: #374151;
+            stroke-width: 4;
+            fill: none;
+            stroke-linecap: round;
+            visibility: visible;
+        }
+        .tree {
+            stroke: #8B4513;
+            stroke-width: 8;
+            fill: none;
+            stroke-linecap: round;
+            visibility: visible;
+        }
+        .leaves {
+            fill: #2E8B57;
+            stroke: #228B22;
+            stroke-width: 1;
+            visibility: visible;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        #word-display {
+            min-height: 4rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            display: flex;
+        }
+        #word-display span {
+            margin: 0 4px;
+        }
+        #game-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        #keyboard {
+            margin-top: 20px;
+        }
+        @media (max-width: 640px) {
+            #word-display span {
+                margin: 0 2px;
+                width: 6vw;
+                height: 6vw;
+            }
+            #keyboard {
+                gap: 4px;
+            }
+            .w-10, .h-10 {
+                width: 8vw;
+                height: 8vw;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen font-sans p-4">
+    <div id="game-container" class="bg-white p-6 md:p-8 rounded-2xl shadow-xl text-center max-w-2xl w-full mx-auto">
+        <h1 class="text-4xl font-bold mb-4 text-gray-800">Juego del Ahorcado</h1>
+
+        <!-- SECCIÓN DE CARGA DE ARCHIVO -->
+        <div id="file-upload-section" class="transition-opacity duration-500">
+            <p class="mb-4 text-gray-600">Sube un archivo de Word (.docx) con una lista de palabras para empezar a jugar.</p>
+            <label for="word-file" class="w-full cursor-pointer bg-white border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-violet-500 hover:bg-violet-50 transition-colors block">
+                <span class="text-violet-600 font-semibold">Selecciona un archivo</span> o arrástralo aquí.
+                <input type="file" id="word-file" accept=".docx" class="hidden"/>
+            </label>
+            <p id="file-status" class="mt-2 text-sm text-red-600 h-5"></p>
+        </div>
+
+        <!-- SECCIÓN DE SELECCIÓN DE PALABRA POR NÚMERO -->
+        <div id="word-number-selection-section" class="hidden fade-in">
+            <h2 class="text-2xl font-bold mb-4 text-gray-800">Ingresa el número de la palabra</h2>
+            <p id="word-count-display" class="mb-4 text-gray-600"></p>
+            <input type="number" id="word-number-input" class="border border-gray-300 rounded-lg p-3 text-center text-xl w-24 mx-auto block mb-4" min="1">
+            <button id="start-game-number-btn" class="bg-violet-600 text-white px-8 py-3 rounded-lg hover:bg-violet-700 transition-transform hover:scale-105 shadow-lg">
+                Empezar Juego con Palabra Número
+            </button>
+            <button id="cancel-number-selection-btn" class="mt-2 bg-gray-400 text-white px-8 py-3 rounded-lg hover:bg-gray-500 transition-transform hover:scale-105 shadow-lg">
+                Cancelar
+            </button>
+            <p id="number-selection-status" class="mt-2 text-sm text-red-600 h-5"></p>
+        </div>
+
+        <!-- SECCIÓN DEL JUEGO -->
+        <div id="game-section" class="hidden fade-in">
+            <svg height="250" width="200" viewBox="0 0 200 250" class="mx-auto mb-4">
+                <line x1="10" y1="230" x2="190" y2="230" class="gallows" />
+                <path d="M 140 40 Q 120 0, 160 5 Q 190 10, 180 40 Q 190 60, 160 65 Q 130 60, 140 40 Z" class="leaves" />
+                <path d="M 50 80 Q 30 50, 60 40 Q 90 30, 100 50 Q 110 80, 80 90 Q 50 100, 50 80 Z" class="leaves" />
+                <path d="M 80 230 C 70 180, 90 150, 80 50" class="tree" />
+                <path d="M 80 80 C 60 70, 50 60, 50 40" class="tree" />
+                <path d="M 80 50 Q 90 20, 160 20" class="tree" />
+                <line x1="160" y1="20" x2="160" y2="50" class="gallows" />
+                <circle cx="160" cy="70" r="20" class="hangman-part" id="head" />
+                <line x1="160" y1="90" x2="160" y2="150" class="hangman-part" id="body" />
+                <line x1="160" y1="110" x2="130" y2="130" class="hangman-part" id="left-arm" />
+                <line x1="160" y1="110" x2="190" y2="130" class="hangman-part" id="right-arm" />
+                <line x1="160" y1="150" x2="130" y2="180" class="hangman-part" id="left-leg" />
+                <line x1="160" y1="150" x2="190" y2="180" class="hangman-part" id="right-leg" />
+            </svg>
+            <!-- Contador de errores -->
+            <p id="wrong-count" class="text-gray-500 text-sm mb-2"></p>
+            <!-- Palabra a adivinar -->
+            <div id="word-display" class="text-2xl md:text-4xl tracking-widest my-6 font-mono text-gray-700"></div>
+            <!-- Teclado en pantalla -->
+            <div id="keyboard" class="flex flex-wrap justify-center gap-2 max-w-lg mx-auto"></div>
+            <!-- Mensaje de fin de juego -->
+            <div id="game-over-message" class="mt-6 text-2xl font-bold h-12"></div>
+            <!-- Botón para volver a jugar -->
+            <button id="play-again-btn" class="hidden mt-2 bg-violet-600 text-white px-8 py-3 rounded-lg hover:bg-violet-700 transition-transform hover:scale-105 shadow-lg">
+                Jugar de Nuevo
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Constantes ---
+        const MAX_WRONG_GUESSES = 6;
+        const HANGMAN_PARTS = ['head', 'body', 'left-arm', 'right-arm', 'left-leg', 'right-leg'];
+        // Regex para limpiar caracteres no válidos, preservando vocales acentuadas y Ñ
+        const INVALID_CHARS_RE = /[^A-ZÁÉÍÓÚÜÑ]/g;
+        const ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
+        const ACCENTED_VOWELS = 'ÁÉÍÓÚÜ';
+
+        // --- Elementos del DOM ---
+        const fileUploadSection = document.getElementById('file-upload-section');
+        const wordNumberSelectionSection = document.getElementById('word-number-selection-section');
+        const gameSection = document.getElementById('game-section');
+        const fileInput = document.getElementById('word-file');
+        const fileStatus = document.getElementById('file-status');
+        const wordCountDisplay = document.getElementById('word-count-display');
+        const wordNumberInput = document.getElementById('word-number-input');
+        const startGameNumberBtn = document.getElementById('start-game-number-btn');
+        const cancelNumberSelectionBtn = document.getElementById('cancel-number-selection-btn');
+        const numberSelectionStatus = document.getElementById('number-selection-status');
+        const wordDisplay = document.getElementById('word-display');
+        const keyboardDiv = document.getElementById('keyboard');
+        const gameOverMessage = document.getElementById('game-over-message');
+        const playAgainBtn = document.getElementById('play-again-btn');
+        const wrongCountDisplay = document.getElementById('wrong-count');
+
+        // --- Estado del juego ---
+        let wordList = [];
+        let selectedWord = '';
+        let correctLetters = [];
+        let wrongGuesses = 0;
+        let isGameOver = false;
+
+        // --- Event Listeners ---
+        fileInput.addEventListener('change', handleFileSelect);
+        startGameNumberBtn.addEventListener('click', handleNumberSelection);
+        cancelNumberSelectionBtn.addEventListener('click', showFileUpload);
+        playAgainBtn.addEventListener('click', showWordNumberSelection);
+
+        // Soporte para teclado físico durante el juego
+        document.addEventListener('keydown', (e) => {
+            if (gameSection.classList.contains('hidden') || isGameOver) return;
+            const letter = e.key.toUpperCase();
+            if ((ALPHABET + ACCENTED_VOWELS).includes(letter) && letter.length === 1) {
+                const btn = [...keyboardDiv.querySelectorAll('button')]
+                    .find(b => b.textContent === letter && !b.disabled);
+                if (btn) btn.click();
+            }
+        });
+
+        /**
+         * Maneja la selección de un archivo .docx, lo lee y extrae las palabras.
+         */
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                fileStatus.textContent = 'No se seleccionó ningún archivo.';
+                return;
+            }
+            if (!file.name.endsWith('.docx')) {
+                fileStatus.textContent = 'Por favor, sube un archivo .docx válido.';
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                mammoth.extractRawText({ arrayBuffer: e.target.result })
+                    .then(result => processTextToWordList(result.value))
+                    .catch(err => {
+                        console.error('Error al leer el archivo:', err);
+                        fileStatus.textContent = 'No se pudo leer el archivo. Asegúrate de que no esté corrupto.';
+                    });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        /**
+         * Procesa el texto extraído para obtener una lista de palabras válidas.
+         * Preserva vocales acentuadas (Á, É, Í, Ó, Ú, Ü) y la Ñ.
+         */
+        function processTextToWordList(text) {
+            if (!text || !text.trim()) {
+                fileStatus.textContent = 'El archivo está vacío o no contiene texto.';
+                return;
+            }
+            wordList = text
+                .toUpperCase()
+                .split(/[\s,.;:!?¡¿"""()]+/)
+                .map(word => word.trim().replace(INVALID_CHARS_RE, ''))
+                .filter(word => word.length > 2);
+
+            if (wordList.length === 0) {
+                fileStatus.textContent = 'No se encontraron palabras válidas en el archivo.';
+                return;
+            }
+            showWordNumberSelection();
+        }
+
+        /**
+         * Muestra la sección de carga de archivo y resetea el estado.
+         */
+        function showFileUpload() {
+            wordNumberSelectionSection.classList.add('hidden');
+            gameSection.classList.add('hidden');
+            fileUploadSection.classList.remove('hidden');
+            fileStatus.textContent = '';
+            fileInput.value = '';
+            wordList = [];
+            selectedWord = '';
+        }
+
+        /**
+         * Muestra la sección para seleccionar la palabra por número.
+         */
+        function showWordNumberSelection() {
+            gameSection.classList.add('hidden');
+            fileUploadSection.classList.add('hidden');
+            wordNumberSelectionSection.classList.remove('hidden');
+            gameOverMessage.textContent = '';
+            gameOverMessage.className = 'mt-6 text-2xl font-bold h-12';
+            playAgainBtn.classList.add('hidden');
+            selectedWord = '';
+            wordCountDisplay.textContent = `Se encontraron ${wordList.length} palabras. Ingresa un número entre 1 y ${wordList.length}.`;
+            wordNumberInput.value = '';
+            wordNumberInput.max = wordList.length;
+            numberSelectionStatus.textContent = '';
+        }
+
+        /**
+         * Valida el número ingresado y selecciona la palabra correspondiente.
+         */
+        function handleNumberSelection() {
+            const selectedNumber = parseInt(wordNumberInput.value, 10);
+            if (isNaN(selectedNumber) || selectedNumber < 1 || selectedNumber > wordList.length) {
+                numberSelectionStatus.textContent = `Número inválido. Ingresa un número entre 1 y ${wordList.length}.`;
+                return;
+            }
+            selectedWord = wordList[selectedNumber - 1];
+            startGame();
+        }
+
+        /**
+         * Inicia una nueva partida con la palabra seleccionada.
+         */
+        function startGame() {
+            wrongGuesses = 0;
+            correctLetters = [];
+            isGameOver = false;
+            gameOverMessage.textContent = '';
+            gameOverMessage.className = 'mt-6 text-2xl font-bold h-12';
+            playAgainBtn.classList.add('hidden');
+            HANGMAN_PARTS.forEach(id => document.getElementById(id).style.visibility = 'hidden');
+            wordNumberSelectionSection.classList.add('hidden');
+            gameSection.classList.remove('hidden');
+            updateWrongCount();
+            displayWord();
+            generateKeyboard();
+        }
+
+        /**
+         * Renderiza la palabra con guiones bajos para letras no descubiertas.
+         * Acepta un parámetro opcional para revelar todas las letras (al perder).
+         */
+        function displayWord(revealAll = false) {
+            wordDisplay.innerHTML = selectedWord
+                .split('')
+                .map(letter => {
+                    const isRevealed = correctLetters.includes(letter);
+                    const showLetter = isRevealed || revealAll;
+                    const colorClass = revealAll && !isRevealed ? 'text-red-500 border-red-400' : 'border-gray-400';
+                    return `<span class="inline-block border-b-4 ${colorClass} m-1 w-8 h-10 text-center">${showLetter ? letter : ''}</span>`;
+                })
+                .join('');
+        }
+
+        /**
+         * Actualiza el contador de errores visible al jugador.
+         */
+        function updateWrongCount() {
+            wrongCountDisplay.textContent = `Errores: ${wrongGuesses} / ${MAX_WRONG_GUESSES}`;
+        }
+
+        /**
+         * Genera el teclado en pantalla con el alfabeto español completo,
+         * incluyendo vocales acentuadas.
+         */
+        function generateKeyboard() {
+            keyboardDiv.innerHTML = '';
+            (ALPHABET + ACCENTED_VOWELS).split('').forEach(letter => {
+                const button = document.createElement('button');
+                button.textContent = letter;
+                button.classList.add(
+                    'w-10', 'h-10', 'md:w-12', 'md:h-12', 'bg-gray-200', 'rounded-lg',
+                    'text-lg', 'font-semibold', 'text-gray-700',
+                    'hover:bg-violet-300', 'transition-colors',
+                    'disabled:bg-gray-400', 'disabled:text-gray-200', 'disabled:cursor-not-allowed'
+                );
+                button.addEventListener('click', () => handleGuess(letter, button));
+                keyboardDiv.appendChild(button);
+            });
+        }
+
+        /**
+         * Maneja la lógica de adivinar una letra: actualiza el estado,
+         * verifica victoria o derrota, y actualiza la UI.
+         */
+        function handleGuess(letter, button) {
+            if (isGameOver) return;
+            button.disabled = true;
+
+            if (selectedWord.includes(letter)) {
+                correctLetters.push(letter);
+                button.classList.replace('bg-gray-200', 'bg-green-400');
+                button.classList.add('text-white');
+                displayWord();
+                // Victoria: todas las letras únicas de la palabra fueron adivinadas
+                const allRevealed = selectedWord.split('').every(l => correctLetters.includes(l));
+                if (allRevealed) endGame(true);
+            } else {
+                wrongGuesses++;
+                button.classList.replace('bg-gray-200', 'bg-red-400');
+                button.classList.add('text-white');
+                const part = document.getElementById(HANGMAN_PARTS[wrongGuesses - 1]);
+                if (part) part.style.visibility = 'visible';
+                updateWrongCount();
+                if (wrongGuesses >= MAX_WRONG_GUESSES) endGame(false);
+            }
+        }
+
+        /**
+         * Finaliza el juego: deshabilita el teclado, muestra el resultado
+         * y revela la palabra completa en caso de derrota.
+         */
+        function endGame(isWin) {
+            isGameOver = true;
+            keyboardDiv.querySelectorAll('button').forEach(btn => btn.disabled = true);
+
+            if (isWin) {
+                gameOverMessage.textContent = '🎉 ¡Felicidades, ganaste! 🎉';
+                gameOverMessage.classList.add('text-green-600');
+            } else {
+                displayWord(true); // Revela la palabra completa, marcando letras no adivinadas en rojo
+                gameOverMessage.textContent = `😕 ¡Perdiste! La palabra era: ${selectedWord}`;
+                gameOverMessage.classList.add('text-red-600');
+            }
+            playAgainBtn.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
