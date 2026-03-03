@@ -2,6 +2,7 @@ import io
 import re
 
 import streamlit as st
+import streamlit.components.v1 as components
 from docx import Document
 
 # --- Constantes ---
@@ -261,7 +262,7 @@ def main():
     elif st.session_state.phase == 'game':
         _, col_center, _ = st.columns([1, 2, 1])
         with col_center:
-            st.markdown(get_hangman_svg(st.session_state.wrong_guesses), unsafe_allow_html=True)
+            components.html(get_hangman_svg(st.session_state.wrong_guesses), height=320)
 
         st.markdown(
             f'<p style="text-align:center;color:#6b7280;margin-top:-0.5rem">'
