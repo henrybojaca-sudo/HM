@@ -1,8 +1,8 @@
-import base64
 import io
 import re
 
 import streamlit as st
+import streamlit.components.v1 as components
 from docx import Document
 
 # --- Constantes ---
@@ -262,14 +262,14 @@ def main():
     elif st.session_state.phase == 'game':
         _, col_center, _ = st.columns([1, 2, 1])
         with col_center:
-            svg = get_hangman_svg(st.session_state.wrong_guesses)
-            b64 = base64.b64encode(svg.encode()).decode()
-            st.markdown(
-                f'<div style="text-align:center">'
-                f'<img src="data:image/svg+xml;base64,{b64}" width="240" height="300"/>'
-                f'</div>',
-                unsafe_allow_html=True,
+            html = (
+                "<!DOCTYPE html><html>"
+                "<head><style>html,body{margin:0;padding:0;background:transparent;"
+                "display:flex;justify-content:center;}</style></head>"
+                f"<body>{get_hangman_svg(st.session_state.wrong_guesses)}</body>"
+                "</html>"
             )
+            components.html(html, height=320, scrolling=False)
 
         st.markdown(
             f'<p style="text-align:center;color:#6b7280;margin-top:-0.5rem">'
