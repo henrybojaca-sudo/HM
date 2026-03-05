@@ -12,6 +12,59 @@ ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'
 ACCENTED_VOWELS = 'ÁÉÍÓÚÜ'
 ALL_LETTERS = ALPHABET + ACCENTED_VOWELS
 
+# --- Vocabulario integrado: Maestría en Finanzas ---
+# Organizado por categorías temáticas de lo que debe ofrecer un programa
+# de maestría en finanzas flexible y de vanguardia.
+FINANCE_MASTERS_CATEGORIES = {
+    "Mercados y Productos Financieros": [
+        "DERIVADOS", "OPCIONES", "FUTUROS", "FORWARDS", "SWAPS",
+        "BONOS", "ACCIONES", "DIVISAS", "COMMODITIES", "PORTAFOLIO",
+        "TITULARIZACIÓN", "SECURITIZACIÓN", "WARRANTS", "FONDOS",
+        "CRIPTOACTIVOS", "TOKENIZACIÓN",
+    ],
+    "Valoración y Análisis": [
+        "VALORACIÓN", "FLUJOSDECAJA", "WACC", "DESCUENTO", "MÚLTIPLOS",
+        "ARBITRAJE", "BETA", "VOLATILIDAD", "RENTABILIDAD", "RENDIMIENTO",
+        "SENSIBILIDAD", "ESCENARIOS", "SIMULACIÓN", "MODELACIÓN",
+    ],
+    "Gestión del Riesgo": [
+        "RIESGO", "COBERTURA", "EXPOSICIÓN", "DIVERSIFICACIÓN",
+        "CORRELACIÓN", "COVARIANZA", "LIQUIDEZ", "SOLVENCIA",
+        "CREDITICIO", "OPERACIONAL", "SISTÉMICO", "REGULATORIO",
+        "GESTIONDERIESGOS", "STRESSTEST",
+    ],
+    "Finanzas Corporativas": [
+        "FUSIONES", "ADQUISICIONES", "ESCISIONES", "RESTRUCTURACIÓN",
+        "CAPITAL", "DEUDA", "LEVERAGE", "DIVIDENDOS", "RECOMPRAS",
+        "PRESUPUESTO", "TESORERÍA", "FONDOSDETRABAJO", "PROYECCIONES",
+    ],
+    "Banca e Inversión": [
+        "BANCA", "INVERSIÓN", "BURSÁTIL", "CRÉDITO", "UNDERWRITING",
+        "SINDICACIÓN", "CUSTODIA", "GESTIÓN", "PATRIMONIO", "PRIVATE",
+        "EQUITY", "VENTURE", "DEUDA", "ESTRUCTURADA",
+    ],
+    "Tecnología y Finanzas (FinTech)": [
+        "FINTECH", "BLOCKCHAIN", "INTELIGENCIAARTIFICIAL", "BIGDATA",
+        "ANALÍTICA", "ROBOADVISOR", "PAGOSDIGITALES", "OPENBANKING",
+        "ALGORÍTMICO", "REGTECH", "INSURTECH", "CROWDFUNDING",
+    ],
+    "Finanzas Sostenibles y ESG": [
+        "SOSTENIBILIDAD", "ESG", "AMBIENTAL", "SOCIAL", "GOBERNANZA",
+        "BONOSVERDES", "IMPACTO", "TAXONOMÍA", "CARBONO", "CLIMÁTICO",
+        "RESPONSABILIDAD", "TRANSPARENCIA",
+    ],
+    "Macroeconomía y Política Monetaria": [
+        "MACROECONOMÍA", "POLÍTICA", "MONETARIA", "INFLACIÓN", "TASAS",
+        "RESERVAS", "BALANZA", "PAGOS", "CICLOECONOMICO", "EXPANSIÓN",
+        "RECESIÓN", "GLOBALIZACIÓN", "INTEGRACIÓN",
+    ],
+    "Habilidades y Competencias Directivas": [
+        "LIDERAZGO", "ESTRATEGIA", "NEGOCIACIÓN", "ÉTICA", "GOBIERNO",
+        "CORPORATIVO", "COMUNICACIÓN", "PRESENTACIÓN", "NETWORKING",
+        "EMPRENDIMIENTO", "INNOVACIÓN", "TRANSFORMACIÓN",
+    ],
+}
+
 
 def get_hangman_svg(wrong_guesses: int) -> str:
     def vis(show: bool) -> str:
@@ -119,6 +172,14 @@ def extract_words_from_docx(file_bytes: bytes) -> list:
     return [w for w in (INVALID_CHARS_RE.sub('', w).strip() for w in words) if len(w) > 2]
 
 
+def get_all_finance_words() -> list:
+    """Devuelve la lista plana de todas las palabras del vocabulario de finanzas."""
+    words = []
+    for category_words in FINANCE_MASTERS_CATEGORIES.values():
+        words.extend(category_words)
+    return words
+
+
 def init_state():
     defaults = {
         'phase': 'upload',
@@ -129,6 +190,7 @@ def init_state():
         'is_game_over': False,
         'is_win': False,
         'guessed_letters': set(),
+        'finance_category': None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -229,19 +291,96 @@ def main():
 
     # --- FASE: CARGA DE ARCHIVO ---
     if st.session_state.phase == 'upload':
-        st.write("Sube un archivo de Word (.docx) con una lista de palabras para empezar a jugar.")
-        uploaded_file = st.file_uploader("Selecciona un archivo .docx", type=['docx'])
-        if uploaded_file is not None:
-            words = extract_words_from_docx(uploaded_file.read())
-            if not words:
-                st.error("No se encontraron palabras válidas en el archivo.")
+        tab_finanzas, tab_archivo = st.tabs([
+            "Maestría en Finanzas",
+            "Subir archivo .docx",
+        ])
+
+        with tab_finanzas:
+            st.markdown(
+                "### ¿Qué debe ofrecer una Maestría en Finanzas flexible y de vanguardia?\n"
+                "Practica el vocabulario esencial de cada área temática del programa."
+            )
+            category_options = ["Todas las categorías"] + list(FINANCE_MASTERS_CATEGORIES.keys())
+            selected_cat = st.selectbox("Selecciona una categoría temática:", category_options)
+
+            if selected_cat == "Todas las categorías":
+                words_preview = get_all_finance_words()
+                description = (
+                    "Todas las áreas: mercados, valoración, riesgo, finanzas corporativas, "
+                    "banca, FinTech, ESG, macroeconomía y habilidades directivas."
+                )
             else:
-                st.session_state.word_list = words
+                words_preview = FINANCE_MASTERS_CATEGORIES[selected_cat]
+                descriptions = {
+                    "Mercados y Productos Financieros": (
+                        "Derivados, renta variable, renta fija, divisas, commodities, "
+                        "criptoactivos y estructuras de mercado."
+                    ),
+                    "Valoración y Análisis": (
+                        "DCF, WACC, múltiplos de mercado, análisis de escenarios "
+                        "y modelación financiera avanzada."
+                    ),
+                    "Gestión del Riesgo": (
+                        "Riesgo de mercado, crédito, liquidez, operacional y regulatorio. "
+                        "Técnicas de cobertura y stress testing."
+                    ),
+                    "Finanzas Corporativas": (
+                        "Fusiones y adquisiciones, estructura de capital, política de dividendos, "
+                        "presupuesto de capital y gestión de tesorería."
+                    ),
+                    "Banca e Inversión": (
+                        "Banca de inversión, mercado de capitales, private equity, "
+                        "venture capital y gestión de patrimonios."
+                    ),
+                    "Tecnología y Finanzas (FinTech)": (
+                        "Blockchain, inteligencia artificial, big data, algoritmos de trading, "
+                        "open banking y regulación tecnológica."
+                    ),
+                    "Finanzas Sostenibles y ESG": (
+                        "Criterios ambientales, sociales y de gobernanza, bonos verdes, "
+                        "finanzas de impacto y taxonomía de sostenibilidad."
+                    ),
+                    "Macroeconomía y Política Monetaria": (
+                        "Política monetaria y fiscal, inflación, ciclos económicos, "
+                        "balanza de pagos y entorno global."
+                    ),
+                    "Habilidades y Competencias Directivas": (
+                        "Liderazgo, ética, gobierno corporativo, negociación, "
+                        "comunicación financiera e innovación."
+                    ),
+                }
+                description = descriptions.get(selected_cat, "")
+
+            st.info(description)
+            st.caption(f"Esta categoria contiene {len(words_preview)} terminos.")
+
+            if st.button("Jugar con este vocabulario", type="primary", use_container_width=True):
+                st.session_state.word_list = words_preview
+                st.session_state.finance_category = selected_cat
                 st.session_state.phase = 'select'
                 st.rerun()
 
+        with tab_archivo:
+            st.write("Sube un archivo de Word (.docx) con una lista de palabras para empezar a jugar.")
+            uploaded_file = st.file_uploader("Selecciona un archivo .docx", type=['docx'])
+            if uploaded_file is not None:
+                words = extract_words_from_docx(uploaded_file.read())
+                if not words:
+                    st.error("No se encontraron palabras válidas en el archivo.")
+                else:
+                    st.session_state.word_list = words
+                    st.session_state.finance_category = None
+                    st.session_state.phase = 'select'
+                    st.rerun()
+
     # --- FASE: SELECCIÓN DE PALABRA ---
     elif st.session_state.phase == 'select':
+        if st.session_state.finance_category:
+            st.markdown(
+                f"**Categoria activa:** {st.session_state.finance_category} — "
+                "Maestría en Finanzas"
+            )
         word_count = len(st.session_state.word_list)
         st.info(f"Se encontraron **{word_count}** palabras. Ingresa un número entre 1 y {word_count}.")
         word_num = st.number_input("Número de palabra", min_value=1, max_value=word_count, step=1, value=1)
