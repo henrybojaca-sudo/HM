@@ -1,303 +1,390 @@
 import io
-import re
+import random
 
+import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
-from docx import Document
 
-# --- Constantes ---
-MAX_WRONG_GUESSES = 6
-INVALID_CHARS_RE = re.compile(r'[^A-ZÁÉÍÓÚÜÑ]')
-ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'
-ACCENTED_VOWELS = 'ÁÉÍÓÚÜ'
-ALL_LETTERS = ALPHABET + ACCENTED_VOWELS
+from Cds_Mundo import data as default_data
+
+# ── Configuración de página ───────────────────────────────────────────────────
+st.set_page_config(
+    page_title="CDS Game",
+    page_icon="📊",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
+
+# ── Estilos ───────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+#MainMenu {visibility: hidden;}
+footer     {visibility: hidden;}
+
+/* --- Título --- */
+.title-block { text-align: center; padding: 18px 0 6px; }
+.title-block h1 {
+    font-size: 2.8rem; font-weight: 900; letter-spacing: 4px;
+    color: #FFFFFF; margin: 0;
+}
+.title-block p { color: #888; font-size: 0.9rem; margin: 4px 0 0; }
+
+/* --- Score --- */
+.score-row { display: flex; justify-content: center; gap: 24px; margin: 12px 0 20px; }
+.score-chip {
+    background: #1a1d2e; border-radius: 20px;
+    padding: 8px 22px; font-size: 1rem; color: #fff; font-weight: 600;
+    border: 1px solid #2e3250;
+}
+.score-chip .val  { color: #4CAF50; }
+.score-chip .val2 { color: #FFD700; }
+
+/* --- Pregunta --- */
+.question {
+    text-align: center; font-size: 1.1rem; color: #bbb; margin-bottom: 16px;
+}
+.question strong { color: #fff; }
+
+/* --- Tarjetas de país --- */
+.card {
+    background: linear-gradient(145deg, #1a1d2e, #232742);
+    border-radius: 18px; padding: 26px 16px; text-align: center;
+    min-height: 185px; display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    border: 1px solid #2e3250;
+}
+.card-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 3px; color: #666; margin-bottom: 8px; }
+.card-flag  { line-height: 1; margin-bottom: 6px; min-height: 60px; display:flex; align-items:center; justify-content:center; }
+.card-name  { font-size: 1.25rem; font-weight: 800; color: #fff; }
+.card-region { font-size: 0.75rem; color: #666; margin-top: 3px; }
+.card-cds {
+    margin-top: 10px; font-size: 1rem; font-weight: 700; color: #FF6B6B;
+    background: rgba(255,107,107,0.12); border-radius: 8px; padding: 4px 12px;
+}
+
+/* --- VS --- */
+.vs-wrap { display:flex; align-items:center; justify-content:center; height:100%; }
+.vs-text { font-size: 2rem; font-weight: 900; color: #FF4B4B; }
+
+/* --- Feedback --- */
+.fb-correct {
+    background: rgba(40,167,69,0.12); border: 2px solid #28a745;
+    border-radius: 12px; padding: 16px 20px; text-align: center;
+    color: #4dff7c; font-size: 1.25rem; font-weight: 700; margin-top: 18px;
+}
+.fb-wrong {
+    background: rgba(220,53,69,0.12); border: 2px solid #dc3545;
+    border-radius: 12px; padding: 16px 20px; text-align: center;
+    color: #ff6b6b; font-size: 1.25rem; font-weight: 700; margin-top: 18px;
+}
+.fb-detail { font-size: 0.88rem; color: #ccc; margin-top: 6px; font-weight: 400; }
+
+/* --- Game Over --- */
+.go-box {
+    text-align: center; background: #1a1d2e;
+    border-radius: 18px; padding: 40px 30px; margin: 16px 0;
+    border: 1px solid #2e3250;
+}
+.go-box h2   { color: #FF4B4B; font-size: 2.2rem; margin-bottom: 6px; }
+.go-score    { font-size: 5rem; font-weight: 900; color: #FFD700; line-height: 1; }
+.go-label    { color: #888; font-size: 0.95rem; margin-top: 6px; }
+.go-hs       { color: #4CAF50; font-size: 1rem; margin-top: 14px; }
+.go-tip      { color: #666; font-size: 0.82rem; margin-top: 18px; font-style: italic; }
+
+/* --- Info CDS --- */
+.info-box {
+    background: #1a1d2e; border-radius: 12px; padding: 14px 18px;
+    border-left: 3px solid #4CAF50; margin-top: 28px; font-size: 0.83rem; color: #888;
+}
+.info-box strong { color: #aaa; }
+</style>
+""", unsafe_allow_html=True)
 
 
-def get_hangman_svg(wrong_guesses: int) -> str:
-    def vis(show: bool) -> str:
-        return 'visible' if show else 'hidden'
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def _build_iso_lookup():
+    """Build a name→iso/region lookup from default data for matching uploaded countries."""
+    return {entry["pais"].lower(): entry for entry in default_data}
 
-    return f"""
-    <svg height="300" width="240" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">
-        <!-- Suelo -->
-        <line x1="10" y1="280" x2="230" y2="280" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
 
-        <!-- Follaje derecho del árbol -->
-        <path d="M 168 48 Q 142 0, 185 6 Q 222 12, 210 48 Q 222 74, 185 80 Q 148 74, 168 48 Z"
-              fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
-        <!-- Follaje izquierdo del árbol -->
-        <path d="M 58 95 Q 30 58, 68 44 Q 108 32, 120 60 Q 132 95, 96 107 Q 58 118, 58 95 Z"
-              fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
-        <!-- Follaje pequeño derecho -->
-        <path d="M 148 22 Q 130 -5, 162 2 Q 188 8, 180 28 Q 186 46, 162 50 Q 136 46, 148 22 Z"
-              fill="#3a9b5c" stroke="#228B22" stroke-width="1"/>
+_ISO_LOOKUP = _build_iso_lookup()
 
-        <!-- Tronco principal -->
-        <path d="M 94 280 C 80 215, 104 172, 92 56"
-              stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
-        <!-- Rama lateral izquierda -->
-        <path d="M 92 98 C 66 84, 52 70, 50 44"
-              stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
-        <!-- Raíz izquierda -->
-        <path d="M 92 270 C 70 265, 50 268, 38 278"
-              stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
-        <!-- Raíz derecha -->
-        <path d="M 96 270 C 116 265, 136 268, 148 278"
-              stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
 
-        <!-- Viga horizontal de la horca -->
-        <path d="M 92 58 Q 106 24, 185 24"
-              stroke="#4B3621" stroke-width="5" fill="none" stroke-linecap="round"/>
-        <!-- Cuerda vertical -->
-        <line x1="185" y1="24" x2="185" y2="58"
-              stroke="#4B3621" stroke-width="5" stroke-linecap="round"/>
+def _parse_excel(file_bytes: bytes) -> list:
+    """Parse an Excel file and return a list of country dicts.
 
-        <!-- Nudo de la soga -->
-        <ellipse cx="185" cy="60" rx="5" ry="3"
-                 stroke="#5c4a32" stroke-width="2" fill="#7a6244"
-                 visibility="{vis(wrong_guesses >= 1)}"/>
-
-        <!-- Cabeza con cara -->
-        <circle cx="185" cy="80" r="22" stroke="#374151" stroke-width="4" fill="#f5e6d3"
-                visibility="{vis(wrong_guesses >= 1)}"/>
-        <!-- Ojos (tristes al perder) -->
-        <circle cx="178" cy="76" r="3" fill="#374151"
-                visibility="{vis(wrong_guesses >= 1)}"/>
-        <circle cx="192" cy="76" r="3" fill="#374151"
-                visibility="{vis(wrong_guesses >= 1)}"/>
-        <!-- Boca triste -->
-        <path d="M 178 89 Q 185 84, 192 89"
-              stroke="#374151" stroke-width="2" fill="none" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 1)}"/>
-
-        <!-- Cuerpo -->
-        <line x1="185" y1="102" x2="185" y2="168"
-              stroke="#374151" stroke-width="5" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 2)}"/>
-
-        <!-- Brazo izquierdo -->
-        <line x1="185" y1="122" x2="150" y2="148"
-              stroke="#374151" stroke-width="4" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 3)}"/>
-        <!-- Mano izquierda -->
-        <circle cx="148" cy="150" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"
-                visibility="{vis(wrong_guesses >= 3)}"/>
-
-        <!-- Brazo derecho -->
-        <line x1="185" y1="122" x2="220" y2="148"
-              stroke="#374151" stroke-width="4" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 4)}"/>
-        <!-- Mano derecha -->
-        <circle cx="222" cy="150" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"
-                visibility="{vis(wrong_guesses >= 4)}"/>
-
-        <!-- Pierna izquierda -->
-        <line x1="185" y1="168" x2="155" y2="205"
-              stroke="#374151" stroke-width="4" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 5)}"/>
-        <!-- Pie izquierdo -->
-        <line x1="155" y1="205" x2="140" y2="208"
-              stroke="#374151" stroke-width="3" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 5)}"/>
-
-        <!-- Pierna derecha -->
-        <line x1="185" y1="168" x2="215" y2="205"
-              stroke="#374151" stroke-width="4" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 6)}"/>
-        <!-- Pie derecho -->
-        <line x1="215" y1="205" x2="230" y2="208"
-              stroke="#374151" stroke-width="3" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 6)}"/>
-    </svg>
+    Expects country names in column A and CDS values in column C.
     """
+    df = pd.read_excel(io.BytesIO(file_bytes), header=None, engine="openpyxl")
+    countries = []
+    for _, row in df.iterrows():
+        try:
+            name = str(row.iloc[0]).strip()
+            cds_val = float(row.iloc[2])
+        except (ValueError, IndexError):
+            continue
+        if not name or name.lower() in ("nan", "país", "pais", "country"):
+            continue
+        match = _ISO_LOOKUP.get(name.lower(), {})
+        countries.append({
+            "pais": name,
+            "region": match.get("region", ""),
+            "iso": match.get("iso", ""),
+            "cds": cds_val,
+        })
+    return countries
 
 
-def extract_words_from_docx(file_bytes: bytes) -> list:
-    doc = Document(io.BytesIO(file_bytes))
-    text = '\n'.join(para.text for para in doc.paragraphs).upper()
-    words = re.split(r'[\s,.;:!?¡¿"""()]+', text)
-    return [w for w in (INVALID_CHARS_RE.sub('', w).strip() for w in words) if len(w) > 2]
+def get_active_data() -> list:
+    return st.session_state.get("custom_data") or default_data
 
 
-def init_state():
-    defaults = {
-        'phase': 'upload',
-        'word_list': [],
-        'selected_word': '',
-        'correct_letters': set(),
-        'wrong_guesses': 0,
-        'is_game_over': False,
-        'is_win': False,
-        'guessed_letters': set(),
-    }
-    for key, val in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = val
+def get_random_country(exclude=None):
+    active = get_active_data()
+    options = [x for x in active if x != exclude] if exclude else active[:]
+    return random.choice(options)
 
 
-def reset_game():
-    st.session_state.correct_letters = set()
-    st.session_state.wrong_guesses = 0
-    st.session_state.is_game_over = False
-    st.session_state.is_win = False
-    st.session_state.guessed_letters = set()
+def card_html(label, country, reveal=False):
+    cds_html = f'<div class="card-cds">CDS: {country["cds"]} bps</div>' if reveal else ""
+    iso = country.get("iso", "")
+    flag_html = (
+        f'<img src="https://flagcdn.com/80x60/{iso}.png" '
+        f'     srcset="https://flagcdn.com/160x120/{iso}.png 2x" '
+        f'     width="80" height="60" alt="{country["pais"]}" '
+        f'     style="border-radius:6px; object-fit:cover;">'
+        if iso else ""
+    )
+    return f"""
+    <div class="card">
+        <div class="card-label">{label}</div>
+        <div class="card-flag">{flag_html}</div>
+        <div class="card-name">{country['pais']}</div>
+        <div class="card-region">{country.get('region','')}</div>
+        {cds_html}
+    </div>"""
 
 
-def handle_guess(letter: str):
-    if st.session_state.is_game_over or letter in st.session_state.guessed_letters:
-        return
-    st.session_state.guessed_letters.add(letter)
-    if letter in st.session_state.selected_word:
-        st.session_state.correct_letters.add(letter)
-        if all(l in st.session_state.correct_letters for l in st.session_state.selected_word):
-            st.session_state.is_game_over = True
-            st.session_state.is_win = True
+# ── Sidebar: carga de Excel ───────────────────────────────────────────────────
+with st.sidebar:
+    st.header("📂 Datos personalizados")
+    st.markdown(
+        "Sube un archivo **Excel (.xlsx)** con tus propios valores de CDS:\n"
+        "- **Columna A**: nombre del país\n"
+        "- **Columna C**: valor del CDS (bps)"
+    )
+    uploaded = st.file_uploader("Seleccionar archivo .xlsx", type=["xlsx"])
+
+    if uploaded is not None:
+        try:
+            parsed = _parse_excel(uploaded.read())
+            if len(parsed) < 2:
+                st.error("El archivo debe contener al menos 2 países válidos.")
+            else:
+                if st.session_state.get("custom_data") != parsed:
+                    st.session_state.custom_data = parsed
+                    # Reset game when new data is loaded
+                    for key in ("phase", "score", "high_score",
+                                "country_a", "country_b",
+                                "last_a", "last_b", "next_b", "correct"):
+                        st.session_state.pop(key, None)
+                    st.rerun()
+                st.success(f"✅ {len(parsed)} países cargados desde Excel.")
+        except Exception as e:
+            st.error(f"Error al leer el archivo: {e}")
+
+    if st.session_state.get("custom_data"):
+        if st.button("🔄 Usar datos por defecto", use_container_width=True):
+            st.session_state.custom_data = None
+            for key in ("phase", "score", "high_score",
+                        "country_a", "country_b",
+                        "last_a", "last_b", "next_b", "correct"):
+                st.session_state.pop(key, None)
+            st.rerun()
+        st.caption(f"Usando {len(st.session_state.custom_data)} países del Excel.")
     else:
-        st.session_state.wrong_guesses += 1
-        if st.session_state.wrong_guesses >= MAX_WRONG_GUESSES:
-            st.session_state.is_game_over = True
-            st.session_state.is_win = False
+        st.caption(f"Usando {len(default_data)} países por defecto.")
 
 
-def render_word():
-    word = st.session_state.selected_word
-    correct = st.session_state.correct_letters
-    is_game_over = st.session_state.is_game_over
-    is_win = st.session_state.is_win
-
-    spans = []
-    for letter in word:
-        revealed = letter in correct
-        show_red = is_game_over and not is_win and not revealed
-        if revealed:
-            border_color, text, color = '#9ca3af', letter, '#1f2937'
-        elif show_red:
-            border_color, text, color = '#f87171', letter, '#ef4444'
-        else:
-            border_color, text, color = '#9ca3af', '&nbsp;', 'transparent'
-
-        spans.append(
-            f'<span style="display:inline-block;border-bottom:4px solid {border_color};'
-            f'margin:4px 6px;min-width:2rem;height:2.8rem;text-align:center;'
-            f'font-size:2rem;font-family:monospace;color:{color};font-weight:bold;'
-            f'line-height:2.8rem">{text}</span>'
+# ── Estado inicial ────────────────────────────────────────────────────────────
+def _init():
+    if "phase" not in st.session_state:
+        a = get_random_country()
+        b = get_random_country(exclude=a)
+        st.session_state.update(
+            phase="playing",
+            score=0,
+            high_score=0,
+            country_a=a,
+            country_b=b,
+            last_a=None,
+            last_b=None,
+            next_b=None,
+            correct=None,
         )
 
-    st.markdown(
-        f'<div style="text-align:center;min-height:4rem;margin:1.5rem 0;flex-wrap:wrap">'
-        f'{"".join(spans)}</div>',
-        unsafe_allow_html=True,
+_init()
+
+
+# ── Callbacks ─────────────────────────────────────────────────────────────────
+def handle_guess(choice):
+    a, b = st.session_state.country_a, st.session_state.country_b
+    a_cds, b_cds = float(a["cds"]), float(b["cds"])
+    is_correct = (choice == "A" and a_cds > b_cds) or (choice == "B" and b_cds >= a_cds)
+
+    st.session_state.last_a = a
+    st.session_state.last_b = b
+    st.session_state.correct = is_correct
+
+    if is_correct:
+        st.session_state.score += 1
+        if st.session_state.score > st.session_state.high_score:
+            st.session_state.high_score = st.session_state.score
+        st.session_state.next_b = get_random_country(exclude=b)
+        st.session_state.phase = "result_correct"
+    else:
+        st.session_state.phase = "game_over"
+
+
+def handle_next():
+    st.session_state.country_a = st.session_state.last_b
+    st.session_state.country_b = st.session_state.next_b
+    st.session_state.phase = "playing"
+
+
+def handle_replay():
+    a = get_random_country()
+    b = get_random_country(exclude=a)
+    st.session_state.update(
+        phase="playing",
+        score=0,
+        country_a=a,
+        country_b=b,
+        last_a=None,
+        last_b=None,
+        next_b=None,
+        correct=None,
     )
 
 
-def render_keyboard():
-    guessed = st.session_state.guessed_letters
-    correct = st.session_state.correct_letters
-    letters = list(ALL_LETTERS)
-    rows = [letters[i:i + 9] for i in range(0, len(letters), 9)]
+# ── Render ────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="title-block">
+    <h1>📊 CDS GAME</h1>
+    <p>Riesgo crediticio soberano — Credit Default Swaps</p>
+</div>""", unsafe_allow_html=True)
 
-    for row in rows:
-        cols = st.columns(len(row))
-        for i, letter in enumerate(row):
-            with cols[i]:
-                if letter in guessed:
-                    color = '#4ade80' if letter in correct else '#f87171'
-                    st.markdown(
-                        f'<div style="background:{color};color:white;border-radius:8px;'
-                        f'text-align:center;padding:9px 0;font-weight:bold;font-size:1rem;'
-                        f'margin:2px;cursor:default">{letter}</div>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    if st.button(letter, key=f"key_{letter}"):
-                        handle_guess(letter)
-                        st.rerun()
+st.markdown(f"""
+<div class="score-row">
+    <div class="score-chip">Puntos&nbsp;<span class="val">{st.session_state.score}</span></div>
+    <div class="score-chip">Récord&nbsp;<span class="val2">{st.session_state.high_score}</span></div>
+</div>""", unsafe_allow_html=True)
 
+phase = st.session_state.phase
 
-def main():
-    st.set_page_config(page_title="Juego del Ahorcado", page_icon="🎮", layout="centered")
-    st.markdown("""
-    <style>
-        .stButton > button { width: 100%; font-weight: bold; font-size: 1rem; }
-        h1 { text-align: center; }
-        .block-container { padding-top: 2rem; }
-    </style>
-    """, unsafe_allow_html=True)
+# ─── JUGANDO ──────────────────────────────────────────────────────────────────
+if phase == "playing":
+    st.markdown(
+        '<p class="question">¿Cuál país tiene <strong>MAYOR</strong> riesgo crediticio?</p>',
+        unsafe_allow_html=True,
+    )
 
-    init_state()
-    st.title("Juego del Ahorcado")
+    col_a, col_vs, col_b = st.columns([5, 1, 5])
+    with col_a:
+        st.markdown(card_html("PAÍS A", st.session_state.country_a), unsafe_allow_html=True)
+    with col_vs:
+        st.markdown('<div class="vs-wrap"><div class="vs-text">VS</div></div>', unsafe_allow_html=True)
+    with col_b:
+        st.markdown(card_html("PAÍS B", st.session_state.country_b), unsafe_allow_html=True)
 
-    # --- FASE: CARGA DE ARCHIVO ---
-    if st.session_state.phase == 'upload':
-        st.write("Sube un archivo de Word (.docx) con una lista de palabras para empezar a jugar.")
-        uploaded_file = st.file_uploader("Selecciona un archivo .docx", type=['docx'])
-        if uploaded_file is not None:
-            words = extract_words_from_docx(uploaded_file.read())
-            if not words:
-                st.error("No se encontraron palabras válidas en el archivo.")
-            else:
-                st.session_state.word_list = words
-                st.session_state.phase = 'select'
-                st.rerun()
+    st.write("")
+    btn_a, btn_b = st.columns(2)
+    with btn_a:
+        st.button("🔴 A tiene más riesgo", use_container_width=True,
+                  on_click=handle_guess, args=("A",), type="primary")
+    with btn_b:
+        st.button("🔴 B tiene más riesgo", use_container_width=True,
+                  on_click=handle_guess, args=("B",), type="primary")
 
-    # --- FASE: SELECCIÓN DE PALABRA ---
-    elif st.session_state.phase == 'select':
-        word_count = len(st.session_state.word_list)
-        st.info(f"Se encontraron **{word_count}** palabras. Ingresa un número entre 1 y {word_count}.")
-        word_num = st.number_input("Número de palabra", min_value=1, max_value=word_count, step=1, value=1)
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("▶ Empezar Juego", type="primary", use_container_width=True):
-                st.session_state.selected_word = st.session_state.word_list[int(word_num) - 1]
-                reset_game()
-                st.session_state.phase = 'game'
-                st.rerun()
-        with col2:
-            if st.button("✖ Cancelar", use_container_width=True):
-                st.session_state.phase = 'upload'
-                st.session_state.word_list = []
-                st.rerun()
+# ─── CORRECTO ─────────────────────────────────────────────────────────────────
+elif phase == "result_correct":
+    a, b = st.session_state.last_a, st.session_state.last_b
+    winner = a if float(a["cds"]) > float(b["cds"]) else b
 
-    # --- FASE: JUEGO ---
-    elif st.session_state.phase == 'game':
-        _, col_center, _ = st.columns([1, 2, 1])
-        with col_center:
-            html = (
-                "<!DOCTYPE html><html>"
-                "<head><style>html,body{margin:0;padding:0;background:transparent;"
-                "display:flex;justify-content:center;}</style></head>"
-                f"<body>{get_hangman_svg(st.session_state.wrong_guesses)}</body>"
-                "</html>"
-            )
-            components.html(html, height=320, scrolling=False)
+    st.markdown(
+        '<p class="question">Resultado de la ronda</p>',
+        unsafe_allow_html=True,
+    )
 
-        st.markdown(
-            f'<p style="text-align:center;color:#6b7280;margin-top:-0.5rem">'
-            f'Errores: {st.session_state.wrong_guesses} / {MAX_WRONG_GUESSES}</p>',
-            unsafe_allow_html=True,
-        )
+    col_a, col_vs, col_b = st.columns([5, 1, 5])
+    with col_a:
+        st.markdown(card_html("PAÍS A", a, reveal=True), unsafe_allow_html=True)
+    with col_vs:
+        st.markdown('<div class="vs-wrap"><div class="vs-text">VS</div></div>', unsafe_allow_html=True)
+    with col_b:
+        st.markdown(card_html("PAÍS B", b, reveal=True), unsafe_allow_html=True)
 
-        render_word()
+    st.markdown(f"""
+    <div class="fb-correct">
+        ✅ ¡CORRECTO!
+        <div class="fb-detail">
+            <strong>{winner['pais']}</strong> tiene el CDS más alto
+            &nbsp;({winner['cds']} bps)
+        </div>
+    </div>""", unsafe_allow_html=True)
 
-        if st.session_state.is_game_over:
-            if st.session_state.is_win:
-                st.success("🎉 ¡Felicidades, ganaste! 🎉")
-            else:
-                st.error(f"😕 ¡Perdiste! La palabra era: **{st.session_state.selected_word}**")
+    st.write("")
+    st.button("▶ Siguiente ronda", use_container_width=True,
+              on_click=handle_next, type="primary")
 
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔄 Jugar de Nuevo", type="primary", use_container_width=True):
-                    st.session_state.phase = 'select'
-                    st.rerun()
-            with col2:
-                if st.button("📂 Nuevo Archivo", use_container_width=True):
-                    st.session_state.phase = 'upload'
-                    st.session_state.word_list = []
-                    st.rerun()
-        else:
-            render_keyboard()
+# ─── GAME OVER ────────────────────────────────────────────────────────────────
+elif phase == "game_over":
+    a, b = st.session_state.last_a, st.session_state.last_b
+    winner = a if float(a["cds"]) > float(b["cds"]) else b
 
+    col_a, col_vs, col_b = st.columns([5, 1, 5])
+    with col_a:
+        st.markdown(card_html("PAÍS A", a, reveal=True), unsafe_allow_html=True)
+    with col_vs:
+        st.markdown('<div class="vs-wrap"><div class="vs-text">VS</div></div>', unsafe_allow_html=True)
+    with col_b:
+        st.markdown(card_html("PAÍS B", b, reveal=True), unsafe_allow_html=True)
 
-if __name__ == "__main__":
-    main()
+    st.markdown(f"""
+    <div class="fb-wrong">
+        ❌ INCORRECTO
+        <div class="fb-detail">
+            <strong>{winner['pais']}</strong> tenía el CDS más alto
+            &nbsp;({winner['cds']} bps)
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    is_new_record = st.session_state.score > 0 and st.session_state.score == st.session_state.high_score
+    hs_html = (
+        '<div class="go-hs">🏆 ¡Nuevo récord!</div>'
+        if is_new_record else ""
+    )
+    st.markdown(f"""
+    <div class="go-box">
+        <h2>JUEGO TERMINADO</h2>
+        <div class="go-score">{st.session_state.score}</div>
+        <div class="go-label">puntos</div>
+        {hs_html}
+        <div class="go-tip">Récord de sesión: {st.session_state.high_score} puntos</div>
+    </div>""", unsafe_allow_html=True)
+
+    st.button("🔄 Jugar de nuevo", use_container_width=True,
+              on_click=handle_replay, type="primary")
+
+# ─── Info pie de página ───────────────────────────────────────────────────────
+with st.expander("ℹ️ ¿Qué es el CDS?"):
+    st.markdown(
+        """
+        Un **Credit Default Swap (CDS)** es un instrumento financiero que funciona como un
+        seguro contra el incumplimiento de pago de un país (deuda soberana).
+        Se mide en **puntos base (bps)** — cuanto mayor el valor, mayor el riesgo percibido
+        por los mercados financieros.
+
+        *Los valores mostrados son aproximados y de carácter educativo.*
+        """
+    )
