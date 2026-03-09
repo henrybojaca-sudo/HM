@@ -1,6 +1,7 @@
 import io
 import re
 
+import openpyxl
 import streamlit as st
 import streamlit.components.v1 as components
 from docx import Document
@@ -116,14 +117,49 @@ def extract_words_from_docx(file_bytes: bytes) -> list:
     doc = Document(io.BytesIO(file_bytes))
     text = '\n'.join(para.text for para in doc.paragraphs).upper()
     words = re.split(r'[\s,.;:!?¡¿"""()]+', text)
-    return [w for w in (INVALID_CHARS_RE.sub('', w).strip() for w in words) if len(w) > 2]
+    valid_words = [w for w in (INVALID_CHARS_RE.sub('', w).strip() for w in words) if len(w) > 2]
+    return [{'name': w, 'cds': None, 'ticker': None} for w in valid_words]
+
+
+def extract_data_from_excel(file_bytes: bytes) -> list:
+    """Lee el Excel: columna A = nombre del país, columna B = ticker, columna C = valor CDS Ask."""
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    ws = wb.active
+
+    entries = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or len(row) < 3:
+            continue
+        name = row[0]   # Columna A: nombre del país
+        ticker = row[1]  # Columna B: CDS Ticker
+        cds_value = row[2]  # Columna C: Ask
+
+        if not name or not isinstance(name, str):
+            continue
+        name = name.strip()
+        if not name:
+            continue
+
+        # Omitir encabezados de región (América, EMEA, Asia...) que no tienen valor CDS numérico
+        if cds_value is None or not isinstance(cds_value, (int, float)):
+            continue
+
+        entries.append({
+            'name': name.upper(),
+            'cds': float(cds_value),
+            'ticker': str(ticker).strip() if ticker else None,
+        })
+
+    return entries
 
 
 def init_state():
     defaults = {
         'phase': 'upload',
-        'word_list': [],
+        'entries': [],
         'selected_word': '',
+        'selected_cds': None,
+        'selected_ticker': None,
         'correct_letters': set(),
         'wrong_guesses': 0,
         'is_game_over': False,
@@ -149,7 +185,8 @@ def handle_guess(letter: str):
     st.session_state.guessed_letters.add(letter)
     if letter in st.session_state.selected_word:
         st.session_state.correct_letters.add(letter)
-        if all(l in st.session_state.correct_letters for l in st.session_state.selected_word):
+        # Ganar si todas las letras (excluyendo espacios) fueron adivinadas
+        if all(l in st.session_state.correct_letters for l in st.session_state.selected_word if l != ' '):
             st.session_state.is_game_over = True
             st.session_state.is_win = True
     else:
@@ -167,6 +204,13 @@ def render_word():
 
     spans = []
     for letter in word:
+        # Los espacios se muestran como separadores fijos (no se adivinan)
+        if letter == ' ':
+            spans.append(
+                '<span style="display:inline-block;min-width:1.2rem;margin:4px 2px;">&nbsp;</span>'
+            )
+            continue
+
         revealed = letter in correct
         show_red = is_game_over and not is_win and not revealed
         if revealed:
@@ -229,37 +273,86 @@ def main():
 
     # --- FASE: CARGA DE ARCHIVO ---
     if st.session_state.phase == 'upload':
-        st.write("Sube un archivo de Word (.docx) con una lista de palabras para empezar a jugar.")
-        uploaded_file = st.file_uploader("Selecciona un archivo .docx", type=['docx'])
-        if uploaded_file is not None:
-            words = extract_words_from_docx(uploaded_file.read())
-            if not words:
-                st.error("No se encontraron palabras válidas en el archivo.")
-            else:
-                st.session_state.word_list = words
-                st.session_state.phase = 'select'
-                st.rerun()
+        tab_excel, tab_docx = st.tabs(["📊 Excel con datos CDS", "📄 Archivo Word (.docx)"])
+
+        with tab_excel:
+            st.write("Sube tu archivo Excel con países y valores CDS (columna A: país, columna C: Ask).")
+            uploaded_excel = st.file_uploader(
+                "Selecciona un archivo .xlsx", type=['xlsx', 'xls'], key="excel_uploader"
+            )
+            if uploaded_excel is not None:
+                entries = extract_data_from_excel(uploaded_excel.read())
+                if not entries:
+                    st.error("No se encontraron datos CDS válidos. Verifica que columna A = país y columna C = valor Ask numérico.")
+                else:
+                    st.session_state.entries = entries
+                    st.session_state.phase = 'select'
+                    st.rerun()
+
+        with tab_docx:
+            st.write("Sube un archivo de Word (.docx) con una lista de palabras para empezar a jugar.")
+            uploaded_file = st.file_uploader(
+                "Selecciona un archivo .docx", type=['docx'], key="docx_uploader"
+            )
+            if uploaded_file is not None:
+                entries = extract_words_from_docx(uploaded_file.read())
+                if not entries:
+                    st.error("No se encontraron palabras válidas en el archivo.")
+                else:
+                    st.session_state.entries = entries
+                    st.session_state.phase = 'select'
+                    st.rerun()
 
     # --- FASE: SELECCIÓN DE PALABRA ---
     elif st.session_state.phase == 'select':
-        word_count = len(st.session_state.word_list)
-        st.info(f"Se encontraron **{word_count}** palabras. Ingresa un número entre 1 y {word_count}.")
-        word_num = st.number_input("Número de palabra", min_value=1, max_value=word_count, step=1, value=1)
+        entries = st.session_state.entries
+        count = len(entries)
+
+        has_cds = any(e['cds'] is not None for e in entries)
+
+        if has_cds:
+            st.info(f"Se cargaron **{count}** países con datos CDS. Selecciona uno para jugar.")
+            # Mostrar CDS pero NO el nombre del país para que sea la pista del juego
+            options = [
+                f"{i + 1}. CDS Ask: {e['cds']:,.2f} bps" + (f"  |  Ticker: {e['ticker']}" if e['ticker'] else "")
+                for i, e in enumerate(entries)
+            ]
+        else:
+            st.info(f"Se encontraron **{count}** palabras. Selecciona un número entre 1 y {count}.")
+            options = [f"{i + 1}. {'*' * len(e['name'])}" for i, e in enumerate(entries)]
+
+        selected_idx = st.selectbox("Selecciona una entrada", range(count), format_func=lambda i: options[i])
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button("▶ Empezar Juego", type="primary", use_container_width=True):
-                st.session_state.selected_word = st.session_state.word_list[int(word_num) - 1]
+                entry = entries[selected_idx]
+                st.session_state.selected_word = entry['name']
+                st.session_state.selected_cds = entry['cds']
+                st.session_state.selected_ticker = entry['ticker']
                 reset_game()
                 st.session_state.phase = 'game'
                 st.rerun()
         with col2:
             if st.button("✖ Cancelar", use_container_width=True):
                 st.session_state.phase = 'upload'
-                st.session_state.word_list = []
+                st.session_state.entries = []
                 st.rerun()
 
     # --- FASE: JUEGO ---
     elif st.session_state.phase == 'game':
+        # Mostrar valor CDS como pista si está disponible
+        if st.session_state.selected_cds is not None:
+            ticker_str = f" &nbsp;|&nbsp; Ticker: {st.session_state.selected_ticker}" if st.session_state.selected_ticker else ""
+            st.markdown(
+                f'<div style="text-align:center;background:#f0f9ff;border:1px solid #bae6fd;'
+                f'border-radius:10px;padding:10px;margin-bottom:0.5rem;">'
+                f'<span style="color:#0369a1;font-size:1.1rem;font-weight:bold">'
+                f'Pista — CDS Ask: {st.session_state.selected_cds:,.2f} bps{ticker_str}'
+                f'</span></div>',
+                unsafe_allow_html=True,
+            )
+
         _, col_center, _ = st.columns([1, 2, 1])
         with col_center:
             html = (
@@ -283,7 +376,7 @@ def main():
             if st.session_state.is_win:
                 st.success("🎉 ¡Felicidades, ganaste! 🎉")
             else:
-                st.error(f"😕 ¡Perdiste! La palabra era: **{st.session_state.selected_word}**")
+                st.error(f"😕 ¡Perdiste! El país era: **{st.session_state.selected_word}**")
 
             col1, col2 = st.columns(2)
             with col1:
@@ -293,7 +386,7 @@ def main():
             with col2:
                 if st.button("📂 Nuevo Archivo", use_container_width=True):
                     st.session_state.phase = 'upload'
-                    st.session_state.word_list = []
+                    st.session_state.entries = []
                     st.rerun()
         else:
             render_keyboard()
