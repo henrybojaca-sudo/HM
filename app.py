@@ -114,9 +114,16 @@ def get_hangman_svg(wrong_guesses: int) -> str:
 
 def extract_words_from_docx(file_bytes: bytes) -> list:
     doc = Document(io.BytesIO(file_bytes))
-    text = '\n'.join(para.text for para in doc.paragraphs).upper()
-    words = re.split(r'[\s,.;:!?¡¿"""()]+', text)
-    return [w for w in (INVALID_CHARS_RE.sub('', w).strip() for w in words) if len(w) > 2]
+    phrases = []
+    for para in doc.paragraphs:
+        line = para.text.upper().strip()
+        # Remove invalid chars but keep spaces
+        cleaned = re.sub(r'[^A-ZÁÉÍÓÚÜÑ ]', '', line)
+        # Collapse multiple spaces
+        cleaned = re.sub(r' {2,}', ' ', cleaned).strip()
+        if len(cleaned.replace(' ', '')) > 2:
+            phrases.append(cleaned)
+    return phrases
 
 
 def init_state():
@@ -149,7 +156,7 @@ def handle_guess(letter: str):
     st.session_state.guessed_letters.add(letter)
     if letter in st.session_state.selected_word:
         st.session_state.correct_letters.add(letter)
-        if all(l in st.session_state.correct_letters for l in st.session_state.selected_word):
+        if all(l in st.session_state.correct_letters for l in st.session_state.selected_word if l != ' '):
             st.session_state.is_game_over = True
             st.session_state.is_win = True
     else:
@@ -167,6 +174,12 @@ def render_word():
 
     spans = []
     for letter in word:
+        if letter == ' ':
+            spans.append(
+                '<span style="display:inline-block;min-width:1.2rem;height:2.8rem;'
+                'margin:4px 6px"></span>'
+            )
+            continue
         revealed = letter in correct
         show_red = is_game_over and not is_win and not revealed
         if revealed:
