@@ -121,8 +121,8 @@ def get_win_animation_html() -> str:
 </style>
 </head>
 <body>
-<svg height="300" width="240" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">
-  <line x1="10" y1="280" x2="230" y2="280" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
+<svg height="300" width="240" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg" overflow="visible">
+  <line x1="10" y1="280" x2="270" y2="280" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
   <path d="M 168 48 Q 142 0, 185 6 Q 222 12, 210 48 Q 222 74, 185 80 Q 148 74, 168 48 Z"
         fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
   <path d="M 58 95 Q 30 58, 68 44 Q 108 32, 120 60 Q 132 95, 96 107 Q 58 118, 58 95 Z"
@@ -175,8 +175,8 @@ def get_win_animation_html() -> str:
       lgL=document.getElementById('lgL'), lgR=document.getElementById('lgR'),
       arL=document.getElementById('arL'), arR=document.getElementById('arR');
 
-  var FALL_END=700, STAND_END=1200, WALK_END=3800;
-  var HX=185, HY=80, SY=152;
+  var FALL_END=700, STAND_END=1200, REPO_END=1550, WALK_END=4200;
+  var HX=185, HY=80, SY=152, WALK_X0=22, WALK_X1=265;
   var happy=false, t0=null;
 
   function easeOut(t){ return 1-Math.pow(1-t,3); }
@@ -193,7 +193,7 @@ def get_win_animation_html() -> str:
     arL.removeAttribute('transform'); arR.removeAttribute('transform');
   }
   function applyWalk(e){
-    var a=Math.sin((e-STAND_END)/350*Math.PI*2)*28;
+    var a=Math.sin((e-REPO_END)/350*Math.PI*2)*28;
     lgL.setAttribute('transform','rotate('+a+',0,88)');
     lgR.setAttribute('transform','rotate('+(-a)+',0,88)');
     arL.setAttribute('transform','rotate('+(-a*0.5)+',0,42)');
@@ -212,9 +212,14 @@ def get_win_animation_html() -> str:
       setT(HX, SY, (1-t)*10);
       resetLimbs();
       if(t>0.6) setHappy();
+    } else if(e<REPO_END){
+      var t=easeIO((e-STAND_END)/(REPO_END-STAND_END));
+      setT(HX+t*(WALK_X0-HX), SY, 0);
+      setHappy();
+      resetLimbs();
     } else if(e<WALK_END){
-      var t=(e-STAND_END)/(WALK_END-STAND_END);
-      setT(HX+t*180, SY, 0);
+      var t=(e-REPO_END)/(WALK_END-REPO_END);
+      setT(WALK_X0+t*(WALK_X1-WALK_X0), SY, 0);
       setHappy();
       applyWalk(e);
     }
