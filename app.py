@@ -172,33 +172,35 @@ def render_word():
     is_game_over = st.session_state.is_game_over
     is_win = st.session_state.is_win
 
-    spans = []
-    for letter in word:
-        if letter == ' ':
-            spans.append(
-                '<span style="display:inline-block;min-width:1.2rem;height:2.8rem;'
-                'margin:4px 6px"></span>'
-            )
-            continue
-        revealed = letter in correct
-        show_red = is_game_over and not is_win and not revealed
-        if revealed:
-            border_color, text, color = '#9ca3af', letter, '#1f2937'
-        elif show_red:
-            border_color, text, color = '#f87171', letter, '#ef4444'
-        else:
-            border_color, text, color = '#9ca3af', '&nbsp;', 'transparent'
+    word_groups = word.split(' ')
+    group_htmls = []
+    for group in word_groups:
+        letter_spans = []
+        for letter in group:
+            revealed = letter in correct
+            show_red = is_game_over and not is_win and not revealed
+            if revealed:
+                border_color, text, color = '#9ca3af', letter, '#1f2937'
+            elif show_red:
+                border_color, text, color = '#f87171', letter, '#ef4444'
+            else:
+                border_color, text, color = '#9ca3af', '&nbsp;', 'transparent'
 
-        spans.append(
-            f'<span style="display:inline-block;border-bottom:4px solid {border_color};'
-            f'margin:4px 6px;min-width:2rem;height:2.8rem;text-align:center;'
-            f'font-size:2rem;font-family:monospace;color:{color};font-weight:bold;'
-            f'line-height:2.8rem">{text}</span>'
+            letter_spans.append(
+                f'<span style="display:inline-block;border-bottom:4px solid {border_color};'
+                f'margin:4px 6px;min-width:2rem;height:2.8rem;text-align:center;'
+                f'font-size:2rem;font-family:monospace;color:{color};font-weight:bold;'
+                f'line-height:2.8rem">{text}</span>'
+            )
+        group_htmls.append(
+            f'<span style="display:inline-block;white-space:nowrap">{"".join(letter_spans)}</span>'
         )
 
+    separator = '<span style="display:inline-block;min-width:1.2rem;height:2.8rem;margin:4px 0"></span>'
     st.markdown(
-        f'<div style="text-align:center;min-height:4rem;margin:1.5rem 0;flex-wrap:wrap">'
-        f'{"".join(spans)}</div>',
+        f'<div style="text-align:center;min-height:4rem;margin:1.5rem 0;'
+        f'display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:0">'
+        f'{separator.join(group_htmls)}</div>',
         unsafe_allow_html=True,
     )
 
