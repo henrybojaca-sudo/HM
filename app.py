@@ -9,8 +9,9 @@ from docx import Document
 MAX_WRONG_GUESSES = 6
 INVALID_CHARS_RE = re.compile(r'[^A-ZÁÉÍÓÚÜÑ]')
 ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'
-ACCENTED_VOWELS = 'ÁÉÍÓÚÜ'
+ACCENTED_VOWELS = 'ÁÉÍÓÚ'
 ALL_LETTERS = ALPHABET + ACCENTED_VOWELS
+AUTO_REVEAL = {' ', 'Ü'}   # caracteres que se muestran sin adivinar
 
 
 def get_hangman_svg(wrong_guesses: int) -> str:
@@ -429,7 +430,7 @@ def handle_guess(letter: str):
     st.session_state.guessed_letters.add(letter)
     if letter in st.session_state.selected_word:
         st.session_state.correct_letters.add(letter)
-        if all(l in st.session_state.correct_letters for l in st.session_state.selected_word if l != ' '):
+        if all(l in st.session_state.correct_letters for l in st.session_state.selected_word if l not in AUTO_REVEAL):
             st.session_state.is_game_over = True
             st.session_state.is_win = True
     else:
@@ -450,7 +451,8 @@ def render_word():
     for group in word_groups:
         letter_spans = []
         for letter in group:
-            revealed = letter in correct
+            auto = letter in AUTO_REVEAL
+            revealed = auto or letter in correct
             show_red = is_game_over and not is_win and not revealed
             if revealed:
                 border_color, text, color = '#9ca3af', letter, '#1f2937'
