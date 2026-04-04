@@ -9,9 +9,8 @@ from docx import Document
 MAX_WRONG_GUESSES = 6
 INVALID_CHARS_RE = re.compile(r'[^A-ZÁÉÍÓÚÜÑ]')
 ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'
-ACCENTED_VOWELS = 'ÁÉÍÓÚ'
-ALL_LETTERS = ALPHABET + ACCENTED_VOWELS
-AUTO_REVEAL = {' ', 'Ü'}   # caracteres que se muestran sin adivinar
+ALL_LETTERS = ALPHABET
+AUTO_REVEAL = {' ', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ü'}  # se muestran sin adivinar
 
 
 def get_hangman_svg(wrong_guesses: int) -> str:
