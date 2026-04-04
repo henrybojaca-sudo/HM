@@ -232,6 +232,159 @@ def get_win_animation_html() -> str:
 </html>"""
 
 
+def get_lose_animation_html() -> str:
+    return """<!DOCTYPE html>
+<html><head>
+<style>html,body{margin:0;padding:0;background:transparent;display:flex;justify-content:center;overflow:hidden;}</style>
+</head><body>
+<svg height="300" width="240" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">
+  <line x1="10" y1="280" x2="230" y2="280" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 168 48 Q 142 0, 185 6 Q 222 12, 210 48 Q 222 74, 185 80 Q 148 74, 168 48 Z"
+        fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
+  <path d="M 58 95 Q 30 58, 68 44 Q 108 32, 120 60 Q 132 95, 96 107 Q 58 118, 58 95 Z"
+        fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
+  <path d="M 148 22 Q 130 -5, 162 2 Q 188 8, 180 28 Q 186 46, 162 50 Q 136 46, 148 22 Z"
+        fill="#3a9b5c" stroke="#228B22" stroke-width="1"/>
+  <path d="M 94 280 C 80 215, 104 172, 92 56"
+        stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 92 98 C 66 84, 52 70, 50 44"
+        stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 92 270 C 70 265, 50 268, 38 278"
+        stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M 96 270 C 116 265, 136 268, 148 278"
+        stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M 92 58 Q 106 24, 185 24"
+        stroke="#4B3621" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <line x1="185" y1="24" x2="185" y2="58" stroke="#4B3621" stroke-width="5" stroke-linecap="round"/>
+  <!-- Nudo de soga vacio -->
+  <ellipse cx="185" cy="62" rx="5" ry="4" stroke="#5c4a32" stroke-width="2" fill="#7a6244"/>
+
+  <!-- Polvo de impacto -->
+  <g id="dust" opacity="0">
+    <ellipse cx="85" cy="273" rx="50" ry="11" fill="#a07850" opacity="0.55"/>
+    <ellipse cx="60" cy="266" rx="14" ry="10" fill="#a07850" opacity="0.4"/>
+    <ellipse cx="118" cy="267" rx="11" ry="8" fill="#a07850" opacity="0.35"/>
+  </g>
+
+  <!-- Estrellas de dolor cerca de la cabeza (mundo: cabeza en ~25,255) -->
+  <g id="stars" opacity="0">
+    <text x="1"  y="240" font-size="13" fill="#fbbf24">✦</text>
+    <text x="38" y="236" font-size="11" fill="#f87171">✦</text>
+    <text x="-2" y="272" font-size="10" fill="#fbbf24">✦</text>
+  </g>
+
+  <!-- Lagrimas (coordenadas mundo, cerca de ojos del muerto en ~21,248 y 21,263) -->
+  <g id="tears" opacity="0">
+    <ellipse id="tr1" cx="21" cy="248" rx="2.5" ry="3.5" fill="#60a5fa"/>
+    <ellipse id="tr2" cx="21" cy="263" rx="2.5" ry="3.5" fill="#93c5fd"/>
+    <ellipse id="tr3" cx="16" cy="255" rx="2"   ry="3"   fill="#60a5fa"/>
+  </g>
+
+  <!-- Figura (coords locales: cabeza en origen) -->
+  <g id="fig" transform="translate(185,80)">
+    <g id="lgL">
+      <line x1="0" y1="88" x2="-30" y2="125" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+      <line x1="-30" y1="125" x2="-45" y2="128" stroke="#374151" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g id="lgR">
+      <line x1="0" y1="88" x2="30" y2="125" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+      <line x1="30" y1="125" x2="45" y2="128" stroke="#374151" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g id="arL">
+      <line x1="0" y1="42" x2="-35" y2="68" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="-37" cy="70" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"/>
+    </g>
+    <g id="arR">
+      <line x1="0" y1="42" x2="35" y2="68" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="37" cy="70" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"/>
+    </g>
+    <line x1="0" y1="22" x2="0" y2="88" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="22" stroke="#374151" stroke-width="4" fill="#f5e6d3"/>
+    <!-- Ojos normales -->
+    <circle id="ey-l" cx="-7" cy="-4" r="3" fill="#374151"/>
+    <circle id="ey-r" cx="7"  cy="-4" r="3" fill="#374151"/>
+    <!-- Ojos X (muerto) -->
+    <g id="xe-l" visibility="hidden">
+      <line x1="-11" y1="-8" x2="-3" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-3"  y1="-8" x2="-11" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <g id="xe-r" visibility="hidden">
+      <line x1="3"  y1="-8" x2="11" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="11" y1="-8" x2="3"  y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <!-- Boca triste -->
+    <path id="mth" d="M -7 9 Q 0 4, 7 9"
+          stroke="#374151" stroke-width="2" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>
+<script>
+(function(){
+  var fig=document.getElementById('fig');
+  var eyL=document.getElementById('ey-l'), eyR=document.getElementById('ey-r');
+  var xeL=document.getElementById('xe-l'), xeR=document.getElementById('xe-r');
+  var dust=document.getElementById('dust');
+  var stars=document.getElementById('stars');
+  var tears=document.getElementById('tears');
+  var tr1=document.getElementById('tr1'),tr2=document.getElementById('tr2'),tr3=document.getElementById('tr3');
+
+  var FALL_END=1100, IMPACT_END=1450, TOTAL=7000;
+  var HX=185, HY=80, DX=25, DY=255;
+  var t0=null, dead=false;
+
+  function easeOut(t){ return 1-Math.pow(1-t,3); }
+
+  function makeDead(){
+    if(!dead){
+      fig.setAttribute('transform','translate('+DX+','+DY+') rotate(90)');
+      eyL.setAttribute('visibility','hidden');
+      eyR.setAttribute('visibility','hidden');
+      xeL.setAttribute('visibility','visible');
+      xeR.setAttribute('visibility','visible');
+      dead=true;
+    }
+  }
+
+  function animTears(e){
+    var cyc=1800;
+    function drop(base, offset){
+      var t=((e-IMPACT_END+offset)%cyc)/cyc;
+      return {y: base+t*24, op: t<0.78?1:(1-t)/0.22};
+    }
+    var a=drop(248,0); tr1.setAttribute('cy',a.y); tr1.setAttribute('opacity',a.op);
+    var b=drop(263,620); tr2.setAttribute('cy',b.y); tr2.setAttribute('opacity',b.op);
+    var c=drop(255,1240); tr3.setAttribute('cy',c.y); tr3.setAttribute('opacity',c.op);
+  }
+
+  function frame(ts){
+    if(!t0) t0=ts;
+    var e=ts-t0;
+
+    if(e<FALL_END){
+      var t=easeOut(e/FALL_END);
+      fig.setAttribute('transform',
+        'translate('+HX+','+(HY+t*(DY-HY))+') rotate('+(t*720)+')');
+    } else if(e<IMPACT_END){
+      var t=(e-FALL_END)/(IMPACT_END-FALL_END);
+      makeDead();
+      dust.setAttribute('opacity', t<0.4?t/0.4:1-(t-0.4)/0.6);
+      stars.setAttribute('opacity', t>0.5?(t-0.5)/0.5:0);
+      tears.setAttribute('opacity', t>0.6?(t-0.6)/0.4:0);
+    } else {
+      makeDead();
+      dust.setAttribute('opacity',0);
+      stars.setAttribute('opacity',1);
+      tears.setAttribute('opacity',1);
+      animTears(e);
+    }
+
+    if(e<TOTAL) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body></html>"""
+
+
 def extract_words_from_docx(file_bytes: bytes) -> list:
     doc = Document(io.BytesIO(file_bytes))
     phrases = []
@@ -399,6 +552,8 @@ def main():
         with col_center:
             if st.session_state.is_win:
                 components.html(get_win_animation_html(), height=320, scrolling=False)
+            elif st.session_state.is_game_over:
+                components.html(get_lose_animation_html(), height=320, scrolling=False)
             else:
                 html = (
                     "<!DOCTYPE html><html>"
