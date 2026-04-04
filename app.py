@@ -112,6 +112,121 @@ def get_hangman_svg(wrong_guesses: int) -> str:
     """
 
 
+def get_win_animation_html() -> str:
+    return """<!DOCTYPE html>
+<html>
+<head>
+<style>
+  html,body{margin:0;padding:0;background:transparent;display:flex;justify-content:center;overflow:hidden;}
+</style>
+</head>
+<body>
+<svg height="300" width="240" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">
+  <line x1="10" y1="280" x2="230" y2="280" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 168 48 Q 142 0, 185 6 Q 222 12, 210 48 Q 222 74, 185 80 Q 148 74, 168 48 Z"
+        fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
+  <path d="M 58 95 Q 30 58, 68 44 Q 108 32, 120 60 Q 132 95, 96 107 Q 58 118, 58 95 Z"
+        fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
+  <path d="M 148 22 Q 130 -5, 162 2 Q 188 8, 180 28 Q 186 46, 162 50 Q 136 46, 148 22 Z"
+        fill="#3a9b5c" stroke="#228B22" stroke-width="1"/>
+  <path d="M 94 280 C 80 215, 104 172, 92 56"
+        stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 92 98 C 66 84, 52 70, 50 44"
+        stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 92 270 C 70 265, 50 268, 38 278"
+        stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M 96 270 C 116 265, 136 268, 148 278"
+        stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M 92 58 Q 106 24, 185 24"
+        stroke="#4B3621" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <line x1="185" y1="24" x2="185" y2="58" stroke="#4B3621" stroke-width="5" stroke-linecap="round"/>
+  <ellipse cx="185" cy="62" rx="5" ry="4" stroke="#5c4a32" stroke-width="2" fill="#7a6244"/>
+
+  <!-- Figura animada (coords locales: cabeza en origen) -->
+  <g id="fig" transform="translate(185,80)">
+    <g id="lgL">
+      <line x1="0" y1="88" x2="-30" y2="125" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+      <line x1="-30" y1="125" x2="-45" y2="128" stroke="#374151" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g id="lgR">
+      <line x1="0" y1="88" x2="30" y2="125" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+      <line x1="30" y1="125" x2="45" y2="128" stroke="#374151" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g id="arL">
+      <line x1="0" y1="42" x2="-35" y2="68" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="-37" cy="70" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"/>
+    </g>
+    <g id="arR">
+      <line x1="0" y1="42" x2="35" y2="68" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="37" cy="70" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"/>
+    </g>
+    <line x1="0" y1="22" x2="0" y2="88" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="22" stroke="#374151" stroke-width="4" fill="#f5e6d3"/>
+    <circle cx="-7" cy="-4" r="3" fill="#374151"/>
+    <circle cx="7" cy="-4" r="3" fill="#374151"/>
+    <path id="mouth" d="M -7 9 Q 0 4, 7 9"
+          stroke="#374151" stroke-width="2" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>
+<script>
+(function(){
+  var fig=document.getElementById('fig'),
+      mouth=document.getElementById('mouth'),
+      lgL=document.getElementById('lgL'), lgR=document.getElementById('lgR'),
+      arL=document.getElementById('arL'), arR=document.getElementById('arR');
+
+  var FALL_END=700, STAND_END=1200, WALK_END=3800;
+  var HX=185, HY=80, SY=152;
+  var happy=false, t0=null;
+
+  function easeOut(t){ return 1-Math.pow(1-t,3); }
+  function easeIO(t){ return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; }
+
+  function setT(x,y,r){
+    fig.setAttribute('transform','translate('+x+','+y+') rotate('+r+')');
+  }
+  function setHappy(){
+    if(!happy){ mouth.setAttribute('d','M -8 6 Q 0 14, 8 6'); happy=true; }
+  }
+  function resetLimbs(){
+    lgL.removeAttribute('transform'); lgR.removeAttribute('transform');
+    arL.removeAttribute('transform'); arR.removeAttribute('transform');
+  }
+  function applyWalk(e){
+    var a=Math.sin((e-STAND_END)/350*Math.PI*2)*28;
+    lgL.setAttribute('transform','rotate('+a+',0,88)');
+    lgR.setAttribute('transform','rotate('+(-a)+',0,88)');
+    arL.setAttribute('transform','rotate('+(-a*0.5)+',0,42)');
+    arR.setAttribute('transform','rotate('+(a*0.5)+',0,42)');
+  }
+
+  function frame(ts){
+    if(!t0) t0=ts;
+    var e=ts-t0;
+    if(e<FALL_END){
+      var t=easeOut(e/FALL_END);
+      setT(HX, HY+t*(SY-HY), Math.sin(t*Math.PI)*10);
+      resetLimbs();
+    } else if(e<STAND_END){
+      var t=easeIO((e-FALL_END)/(STAND_END-FALL_END));
+      setT(HX, SY, (1-t)*10);
+      resetLimbs();
+      if(t>0.6) setHappy();
+    } else if(e<WALK_END){
+      var t=(e-STAND_END)/(WALK_END-STAND_END);
+      setT(HX+t*180, SY, 0);
+      setHappy();
+      applyWalk(e);
+    }
+    if(e<WALK_END) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>"""
+
+
 def extract_words_from_docx(file_bytes: bytes) -> list:
     doc = Document(io.BytesIO(file_bytes))
     phrases = []
@@ -277,14 +392,17 @@ def main():
     elif st.session_state.phase == 'game':
         _, col_center, _ = st.columns([1, 2, 1])
         with col_center:
-            html = (
-                "<!DOCTYPE html><html>"
-                "<head><style>html,body{margin:0;padding:0;background:transparent;"
-                "display:flex;justify-content:center;}</style></head>"
-                f"<body>{get_hangman_svg(st.session_state.wrong_guesses)}</body>"
-                "</html>"
-            )
-            components.html(html, height=320, scrolling=False)
+            if st.session_state.is_win:
+                components.html(get_win_animation_html(), height=320, scrolling=False)
+            else:
+                html = (
+                    "<!DOCTYPE html><html>"
+                    "<head><style>html,body{margin:0;padding:0;background:transparent;"
+                    "display:flex;justify-content:center;}</style></head>"
+                    f"<body>{get_hangman_svg(st.session_state.wrong_guesses)}</body>"
+                    "</html>"
+                )
+                components.html(html, height=320, scrolling=False)
 
         st.markdown(
             f'<p style="text-align:center;color:#6b7280;margin-top:-0.5rem">'
