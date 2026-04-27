@@ -1,9 +1,17 @@
 import io
 import re
-
+import base64
 import streamlit as st
 import streamlit.components.v1 as components
 from docx import Document
+from audio_gen import (
+    generate_bg_tension_wav,
+    generate_click_wav,
+    generate_correct_wav,
+    generate_wrong_wav,
+    generate_win_wav,
+    generate_lose_wav,
+)
 
 # --- Constantes ---
 MAX_WRONG_GUESSES = 6
@@ -13,114 +21,134 @@ ALL_LETTERS = ALPHABET
 AUTO_REVEAL = {' ', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ü'}  # se muestran sin adivinar
 
 
+# ============================================================
+# AUDIO: generación una sola vez con cache
+# ============================================================
+@st.cache_data(show_spinner=False)
+def _bg_tension_wav() -> bytes:
+    return generate_bg_tension_wav()
+
+@st.cache_data(show_spinner=False)
+def _correct_wav() -> bytes:
+    return generate_correct_wav()
+
+@st.cache_data(show_spinner=False)
+def _wrong_wav() -> bytes:
+    return generate_wrong_wav()
+
+@st.cache_data(show_spinner=False)
+def _win_wav() -> bytes:
+    return generate_win_wav()
+
+@st.cache_data(show_spinner=False)
+def _lose_wav() -> bytes:
+    return generate_lose_wav()
+
+
+def play_effect(sound_name: str):
+    """Inyecta un <audio autoplay> invisible para reproducir un efecto puntual."""
+    sounds = {
+        'correct': _correct_wav,
+        'wrong':   _wrong_wav,
+        'win':     _win_wav,
+        'lose':    _lose_wav,
+    }
+    if sound_name not in sounds:
+        return
+    wav_bytes = sounds[sound_name]()
+    b64 = base64.b64encode(wav_bytes).decode('ascii')
+    components.html(
+        f'<audio autoplay style="display:none">'
+        f'<source src="data:audio/wav;base64,{b64}" type="audio/wav">'
+        f'</audio>',
+        height=0,
+    )
+
+
+def render_bg_music():
+    """Reproductor de música de fondo en loop. Se renderiza una vez por rerun."""
+    wav_bytes = _bg_tension_wav()
+    with st.expander("🎵 Música de fondo (tensión)", expanded=False):
+        st.caption(
+            "Música procedural en loop. Si no la oyes, presiona ▶ una vez "
+            "(el navegador puede bloquear el autoplay). El loop dura 16 s."
+        )
+        st.audio(wav_bytes, format="audio/wav", loop=True, autoplay=True)
+
+
+# ============================================================
+# SVG / ANIMACIONES (sin cambios respecto a la versión original)
+# ============================================================
 def get_hangman_svg(wrong_guesses: int) -> str:
     def vis(show: bool) -> str:
         return 'visible' if show else 'hidden'
-
     return f"""
     <svg height="300" width="240" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">
-        <!-- Suelo -->
-        <line x1="10" y1="280" x2="230" y2="280" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
-
-        <!-- Follaje derecho del árbol -->
-        <path d="M 168 48 Q 142 0, 185 6 Q 222 12, 210 48 Q 222 74, 185 80 Q 148 74, 168 48 Z"
-              fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
-        <!-- Follaje izquierdo del árbol -->
-        <path d="M 58 95 Q 30 58, 68 44 Q 108 32, 120 60 Q 132 95, 96 107 Q 58 118, 58 95 Z"
-              fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
-        <!-- Follaje pequeño derecho -->
-        <path d="M 148 22 Q 130 -5, 162 2 Q 188 8, 180 28 Q 186 46, 162 50 Q 136 46, 148 22 Z"
-              fill="#3a9b5c" stroke="#228B22" stroke-width="1"/>
-
-        <!-- Tronco principal -->
-        <path d="M 94 280 C 80 215, 104 172, 92 56"
-              stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
-        <!-- Rama lateral izquierda -->
-        <path d="M 92 98 C 66 84, 52 70, 50 44"
-              stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
-        <!-- Raíz izquierda -->
-        <path d="M 92 270 C 70 265, 50 268, 38 278"
-              stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
-        <!-- Raíz derecha -->
-        <path d="M 96 270 C 116 265, 136 268, 148 278"
-              stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
-
-        <!-- Viga horizontal de la horca -->
-        <path d="M 92 58 Q 106 24, 185 24"
-              stroke="#4B3621" stroke-width="5" fill="none" stroke-linecap="round"/>
-        <!-- Cuerda vertical -->
-        <line x1="185" y1="24" x2="185" y2="58"
-              stroke="#4B3621" stroke-width="5" stroke-linecap="round"/>
-
-        <!-- Nudo de la soga -->
-        <ellipse cx="185" cy="60" rx="5" ry="3"
-                 stroke="#5c4a32" stroke-width="2" fill="#7a6244"
-                 visibility="{vis(wrong_guesses >= 1)}"/>
-
-        <!-- Cabeza con cara -->
-        <circle cx="185" cy="80" r="22" stroke="#374151" stroke-width="4" fill="#f5e6d3"
-                visibility="{vis(wrong_guesses >= 1)}"/>
-        <!-- Ojos (tristes al perder) -->
-        <circle cx="178" cy="76" r="3" fill="#374151"
-                visibility="{vis(wrong_guesses >= 1)}"/>
-        <circle cx="192" cy="76" r="3" fill="#374151"
-                visibility="{vis(wrong_guesses >= 1)}"/>
-        <!-- Boca triste -->
-        <path d="M 178 89 Q 185 84, 192 89"
-              stroke="#374151" stroke-width="2" fill="none" stroke-linecap="round"
+      <line x1="10" y1="280" x2="230" y2="280" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 168 48 Q 142 0, 185 6 Q 222 12, 210 48 Q 222 74, 185 80 Q 148 74, 168 48 Z"
+            fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
+      <path d="M 58 95 Q 30 58, 68 44 Q 108 32, 120 60 Q 132 95, 96 107 Q 58 118, 58 95 Z"
+            fill="#2E8B57" stroke="#228B22" stroke-width="1.5"/>
+      <path d="M 148 22 Q 130 -5, 162 2 Q 188 8, 180 28 Q 186 46, 162 50 Q 136 46, 148 22 Z"
+            fill="#3a9b5c" stroke="#228B22" stroke-width="1"/>
+      <path d="M 94 280 C 80 215, 104 172, 92 56"
+            stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
+      <path d="M 92 98 C 66 84, 52 70, 50 44"
+            stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
+      <path d="M 92 270 C 70 265, 50 268, 38 278"
+            stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <path d="M 96 270 C 116 265, 136 268, 148 278"
+            stroke="#6B3410" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <path d="M 92 58 Q 106 24, 185 24"
+            stroke="#4B3621" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <line x1="185" y1="24" x2="185" y2="58"
+            stroke="#4B3621" stroke-width="5" stroke-linecap="round"/>
+      <ellipse cx="185" cy="60" rx="5" ry="3"
+               stroke="#5c4a32" stroke-width="2" fill="#7a6244"
+               visibility="{vis(wrong_guesses >= 1)}"/>
+      <circle cx="185" cy="80" r="22" stroke="#374151" stroke-width="4" fill="#f5e6d3"
               visibility="{vis(wrong_guesses >= 1)}"/>
-
-        <!-- Cuerpo -->
-        <line x1="185" y1="102" x2="185" y2="168"
-              stroke="#374151" stroke-width="5" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 2)}"/>
-
-        <!-- Brazo izquierdo -->
-        <line x1="185" y1="122" x2="150" y2="148"
-              stroke="#374151" stroke-width="4" stroke-linecap="round"
+      <circle cx="178" cy="76" r="3" fill="#374151"
+              visibility="{vis(wrong_guesses >= 1)}"/>
+      <circle cx="192" cy="76" r="3" fill="#374151"
+              visibility="{vis(wrong_guesses >= 1)}"/>
+      <path d="M 178 89 Q 185 84, 192 89"
+            stroke="#374151" stroke-width="2" fill="none" stroke-linecap="round"
+            visibility="{vis(wrong_guesses >= 1)}"/>
+      <line x1="185" y1="102" x2="185" y2="168"
+            stroke="#374151" stroke-width="5" stroke-linecap="round"
+            visibility="{vis(wrong_guesses >= 2)}"/>
+      <line x1="185" y1="122" x2="150" y2="148"
+            stroke="#374151" stroke-width="4" stroke-linecap="round"
+            visibility="{vis(wrong_guesses >= 3)}"/>
+      <circle cx="148" cy="150" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"
               visibility="{vis(wrong_guesses >= 3)}"/>
-        <!-- Mano izquierda -->
-        <circle cx="148" cy="150" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"
-                visibility="{vis(wrong_guesses >= 3)}"/>
-
-        <!-- Brazo derecho -->
-        <line x1="185" y1="122" x2="220" y2="148"
-              stroke="#374151" stroke-width="4" stroke-linecap="round"
+      <line x1="185" y1="122" x2="220" y2="148"
+            stroke="#374151" stroke-width="4" stroke-linecap="round"
+            visibility="{vis(wrong_guesses >= 4)}"/>
+      <circle cx="222" cy="150" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"
               visibility="{vis(wrong_guesses >= 4)}"/>
-        <!-- Mano derecha -->
-        <circle cx="222" cy="150" r="4" fill="#f5e6d3" stroke="#374151" stroke-width="2"
-                visibility="{vis(wrong_guesses >= 4)}"/>
-
-        <!-- Pierna izquierda -->
-        <line x1="185" y1="168" x2="155" y2="205"
-              stroke="#374151" stroke-width="4" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 5)}"/>
-        <!-- Pie izquierdo -->
-        <line x1="155" y1="205" x2="140" y2="208"
-              stroke="#374151" stroke-width="3" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 5)}"/>
-
-        <!-- Pierna derecha -->
-        <line x1="185" y1="168" x2="215" y2="205"
-              stroke="#374151" stroke-width="4" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 6)}"/>
-        <!-- Pie derecho -->
-        <line x1="215" y1="205" x2="230" y2="208"
-              stroke="#374151" stroke-width="3" stroke-linecap="round"
-              visibility="{vis(wrong_guesses >= 6)}"/>
+      <line x1="185" y1="168" x2="155" y2="205"
+            stroke="#374151" stroke-width="4" stroke-linecap="round"
+            visibility="{vis(wrong_guesses >= 5)}"/>
+      <line x1="155" y1="205" x2="140" y2="208"
+            stroke="#374151" stroke-width="3" stroke-linecap="round"
+            visibility="{vis(wrong_guesses >= 5)}"/>
+      <line x1="185" y1="168" x2="215" y2="205"
+            stroke="#374151" stroke-width="4" stroke-linecap="round"
+            visibility="{vis(wrong_guesses >= 6)}"/>
+      <line x1="215" y1="205" x2="230" y2="208"
+            stroke="#374151" stroke-width="3" stroke-linecap="round"
+            visibility="{vis(wrong_guesses >= 6)}"/>
     </svg>
     """
 
 
 def get_win_animation_html() -> str:
     return """<!DOCTYPE html>
-<html>
-<head>
-<style>
-  html,body{margin:0;padding:0;background:transparent;display:flex;justify-content:center;overflow:hidden;}
-</style>
-</head>
-<body>
+<html><head>
+<style>html,body{margin:0;padding:0;background:transparent;display:flex;justify-content:center;overflow:hidden;}</style>
+</head><body>
 <svg height="300" width="240" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg" overflow="visible">
   <line x1="10" y1="280" x2="270" y2="280" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
   <path d="M 168 48 Q 142 0, 185 6 Q 222 12, 210 48 Q 222 74, 185 80 Q 148 74, 168 48 Z"
@@ -141,8 +169,6 @@ def get_win_animation_html() -> str:
         stroke="#4B3621" stroke-width="5" fill="none" stroke-linecap="round"/>
   <line x1="185" y1="24" x2="185" y2="58" stroke="#4B3621" stroke-width="5" stroke-linecap="round"/>
   <ellipse cx="185" cy="62" rx="5" ry="4" stroke="#5c4a32" stroke-width="2" fill="#7a6244"/>
-
-  <!-- Figura animada (coords locales: cabeza en origen) -->
   <g id="fig" transform="translate(185,80)">
     <g id="lgL">
       <line x1="0" y1="88" x2="-30" y2="125" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
@@ -174,14 +200,11 @@ def get_win_animation_html() -> str:
       mouth=document.getElementById('mouth'),
       lgL=document.getElementById('lgL'), lgR=document.getElementById('lgR'),
       arL=document.getElementById('arL'), arR=document.getElementById('arR');
-
   var FALL_END=700, STAND_END=1200, REPO_END=1550, WALK_END=4200;
   var HX=185, HY=80, SY=152, WALK_X0=22, WALK_X1=265;
   var happy=false, t0=null;
-
   function easeOut(t){ return 1-Math.pow(1-t,3); }
   function easeIO(t){ return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; }
-
   function setT(x,y,r){
     fig.setAttribute('transform','translate('+x+','+y+') rotate('+r+')');
   }
@@ -199,7 +222,6 @@ def get_win_animation_html() -> str:
     arL.setAttribute('transform','rotate('+(-a*0.5)+',0,42)');
     arR.setAttribute('transform','rotate('+(a*0.5)+',0,42)');
   }
-
   function frame(ts){
     if(!t0) t0=ts;
     var e=ts-t0;
@@ -228,8 +250,7 @@ def get_win_animation_html() -> str:
   requestAnimationFrame(frame);
 })();
 </script>
-</body>
-</html>"""
+</body></html>"""
 
 
 def get_lose_animation_html() -> str:
@@ -256,31 +277,22 @@ def get_lose_animation_html() -> str:
   <path d="M 92 58 Q 106 24, 185 24"
         stroke="#4B3621" stroke-width="5" fill="none" stroke-linecap="round"/>
   <line x1="185" y1="24" x2="185" y2="58" stroke="#4B3621" stroke-width="5" stroke-linecap="round"/>
-  <!-- Nudo de soga vacio -->
   <ellipse cx="185" cy="62" rx="5" ry="4" stroke="#5c4a32" stroke-width="2" fill="#7a6244"/>
-
-  <!-- Polvo de impacto -->
   <g id="dust" opacity="0">
     <ellipse cx="85" cy="273" rx="50" ry="11" fill="#a07850" opacity="0.55"/>
     <ellipse cx="60" cy="266" rx="14" ry="10" fill="#a07850" opacity="0.4"/>
     <ellipse cx="118" cy="267" rx="11" ry="8" fill="#a07850" opacity="0.35"/>
   </g>
-
-  <!-- Estrellas de dolor cerca de la cabeza (mundo: cabeza en ~25,255) -->
   <g id="stars" opacity="0">
-    <text x="1"  y="240" font-size="13" fill="#fbbf24">✦</text>
+    <text x="1" y="240" font-size="13" fill="#fbbf24">✦</text>
     <text x="38" y="236" font-size="11" fill="#f87171">✦</text>
     <text x="-2" y="272" font-size="10" fill="#fbbf24">✦</text>
   </g>
-
-  <!-- Lagrimas (coordenadas mundo, cerca de ojos del muerto en ~21,248 y 21,263) -->
   <g id="tears" opacity="0">
     <ellipse id="tr1" cx="21" cy="248" rx="2.5" ry="3.5" fill="#60a5fa"/>
     <ellipse id="tr2" cx="21" cy="263" rx="2.5" ry="3.5" fill="#93c5fd"/>
-    <ellipse id="tr3" cx="16" cy="255" rx="2"   ry="3"   fill="#60a5fa"/>
+    <ellipse id="tr3" cx="16" cy="255" rx="2" ry="3" fill="#60a5fa"/>
   </g>
-
-  <!-- Figura (coords locales: cabeza en origen) -->
   <g id="fig" transform="translate(185,80)">
     <g id="lgL">
       <line x1="0" y1="88" x2="-30" y2="125" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
@@ -300,19 +312,16 @@ def get_lose_animation_html() -> str:
     </g>
     <line x1="0" y1="22" x2="0" y2="88" stroke="#374151" stroke-width="5" stroke-linecap="round"/>
     <circle cx="0" cy="0" r="22" stroke="#374151" stroke-width="4" fill="#f5e6d3"/>
-    <!-- Ojos normales -->
     <circle id="ey-l" cx="-7" cy="-4" r="3" fill="#374151"/>
-    <circle id="ey-r" cx="7"  cy="-4" r="3" fill="#374151"/>
-    <!-- Ojos X (muerto) -->
+    <circle id="ey-r" cx="7" cy="-4" r="3" fill="#374151"/>
     <g id="xe-l" visibility="hidden">
       <line x1="-11" y1="-8" x2="-3" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
-      <line x1="-3"  y1="-8" x2="-11" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-3" y1="-8" x2="-11" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
     </g>
     <g id="xe-r" visibility="hidden">
-      <line x1="3"  y1="-8" x2="11" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
-      <line x1="11" y1="-8" x2="3"  y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="3" y1="-8" x2="11" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="11" y1="-8" x2="3" y2="0" stroke="#374151" stroke-width="2.5" stroke-linecap="round"/>
     </g>
-    <!-- Boca triste -->
     <path id="mth" d="M -7 9 Q 0 4, 7 9"
           stroke="#374151" stroke-width="2" fill="none" stroke-linecap="round"/>
   </g>
@@ -326,13 +335,10 @@ def get_lose_animation_html() -> str:
   var stars=document.getElementById('stars');
   var tears=document.getElementById('tears');
   var tr1=document.getElementById('tr1'),tr2=document.getElementById('tr2'),tr3=document.getElementById('tr3');
-
   var FALL_END=1100, IMPACT_END=1450, TOTAL=7000;
   var HX=185, HY=80, DX=25, DY=255;
   var t0=null, dead=false;
-
   function easeOut(t){ return 1-Math.pow(1-t,3); }
-
   function makeDead(){
     if(!dead){
       fig.setAttribute('transform','translate('+DX+','+DY+') rotate(90)');
@@ -343,7 +349,6 @@ def get_lose_animation_html() -> str:
       dead=true;
     }
   }
-
   function animTears(e){
     var cyc=1800;
     function drop(base, offset){
@@ -354,11 +359,9 @@ def get_lose_animation_html() -> str:
     var b=drop(263,620); tr2.setAttribute('cy',b.y); tr2.setAttribute('opacity',b.op);
     var c=drop(255,1240); tr3.setAttribute('cy',c.y); tr3.setAttribute('opacity',c.op);
   }
-
   function frame(ts){
     if(!t0) t0=ts;
     var e=ts-t0;
-
     if(e<FALL_END){
       var t=easeOut(e/FALL_END);
       fig.setAttribute('transform',
@@ -376,7 +379,6 @@ def get_lose_animation_html() -> str:
       tears.setAttribute('opacity',1);
       animTears(e);
     }
-
     if(e<TOTAL) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -385,14 +387,15 @@ def get_lose_animation_html() -> str:
 </body></html>"""
 
 
+# ============================================================
+# LÓGICA DEL JUEGO
+# ============================================================
 def extract_words_from_docx(file_bytes: bytes) -> list:
     doc = Document(io.BytesIO(file_bytes))
     phrases = []
     for para in doc.paragraphs:
         line = para.text.upper().strip()
-        # Remove invalid chars but keep spaces
         cleaned = re.sub(r'[^A-ZÁÉÍÓÚÜÑ ]', '', line)
-        # Collapse multiple spaces
         cleaned = re.sub(r' {2,}', ' ', cleaned).strip()
         if len(cleaned.replace(' ', '')) > 2:
             phrases.append(cleaned)
@@ -409,6 +412,7 @@ def init_state():
         'is_game_over': False,
         'is_win': False,
         'guessed_letters': set(),
+        'pending_sound': None,  # 'correct' | 'wrong' | 'win' | 'lose' | None
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -421,6 +425,7 @@ def reset_game():
     st.session_state.is_game_over = False
     st.session_state.is_win = False
     st.session_state.guessed_letters = set()
+    st.session_state.pending_sound = None
 
 
 def handle_guess(letter: str):
@@ -429,14 +434,20 @@ def handle_guess(letter: str):
     st.session_state.guessed_letters.add(letter)
     if letter in st.session_state.selected_word:
         st.session_state.correct_letters.add(letter)
-        if all(l in st.session_state.correct_letters for l in st.session_state.selected_word if l not in AUTO_REVEAL):
+        st.session_state.pending_sound = 'correct'
+        if all(l in st.session_state.correct_letters
+               for l in st.session_state.selected_word
+               if l not in AUTO_REVEAL):
             st.session_state.is_game_over = True
             st.session_state.is_win = True
+            st.session_state.pending_sound = 'win'
     else:
         st.session_state.wrong_guesses += 1
+        st.session_state.pending_sound = 'wrong'
         if st.session_state.wrong_guesses >= MAX_WRONG_GUESSES:
             st.session_state.is_game_over = True
             st.session_state.is_win = False
+            st.session_state.pending_sound = 'lose'
 
 
 def render_word():
@@ -444,7 +455,6 @@ def render_word():
     correct = st.session_state.correct_letters
     is_game_over = st.session_state.is_game_over
     is_win = st.session_state.is_win
-
     word_groups = word.split(' ')
     group_htmls = []
     for group in word_groups:
@@ -459,7 +469,6 @@ def render_word():
                 border_color, text, color = '#f87171', letter, '#ef4444'
             else:
                 border_color, text, color = '#9ca3af', '&nbsp;', 'transparent'
-
             letter_spans.append(
                 f'<span style="display:inline-block;border-bottom:4px solid {border_color};'
                 f'margin:4px 6px;min-width:2rem;height:2.8rem;text-align:center;'
@@ -469,7 +478,6 @@ def render_word():
         group_htmls.append(
             f'<span style="display:inline-block;white-space:nowrap">{"".join(letter_spans)}</span>'
         )
-
     separator = '<span style="display:inline-block;min-width:1.2rem;height:2.8rem;margin:4px 0"></span>'
     st.markdown(
         f'<div style="text-align:center;min-height:4rem;margin:1.5rem 0;'
@@ -484,7 +492,6 @@ def render_keyboard():
     correct = st.session_state.correct_letters
     letters = list(ALL_LETTERS)
     rows = [letters[i:i + 9] for i in range(0, len(letters), 9)]
-
     for row in rows:
         cols = st.columns(len(row))
         for i, letter in enumerate(row):
@@ -507,9 +514,9 @@ def main():
     st.set_page_config(page_title="Juego del Ahorcado", page_icon="🎮", layout="centered")
     st.markdown("""
     <style>
-        .stButton > button { width: 100%; font-weight: bold; font-size: 1rem; }
-        h1 { text-align: center; }
-        .block-container { padding-top: 2rem; }
+    .stButton > button { width: 100%; font-weight: bold; font-size: 1rem; }
+    h1 { text-align: center; }
+    .block-container { padding-top: 2rem; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -549,6 +556,9 @@ def main():
 
     # --- FASE: JUEGO ---
     elif st.session_state.phase == 'game':
+        # 🎵 MÚSICA DE FONDO (en loop, siempre visible durante el juego)
+        render_bg_music()
+
         _, col_center, _ = st.columns([1, 2, 1])
         with col_center:
             if st.session_state.is_win:
@@ -570,7 +580,6 @@ def main():
             f'Errores: {st.session_state.wrong_guesses} / {MAX_WRONG_GUESSES}</p>',
             unsafe_allow_html=True,
         )
-
         render_word()
 
         if st.session_state.is_game_over:
@@ -578,7 +587,6 @@ def main():
                 st.success("🎉 ¡Felicidades, ganaste! 🎉")
             else:
                 st.error(f"😕 ¡Perdiste! La palabra era: **{st.session_state.selected_word}**")
-
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("🔄 Jugar de Nuevo", type="primary", use_container_width=True):
@@ -591,6 +599,11 @@ def main():
                     st.rerun()
         else:
             render_keyboard()
+
+        # 🔊 EFECTO PUNTUAL (correct/wrong/win/lose) - se inyecta al final del render
+        if st.session_state.pending_sound:
+            play_effect(st.session_state.pending_sound)
+            st.session_state.pending_sound = None
 
 
 if __name__ == "__main__":
