@@ -38,6 +38,14 @@
         }
         .fade-in { animation: fadeIn 0.5s ease-out forwards; }
 
+        /* Pulso rojo cuando la tensión es alta */
+        @keyframes tensePulse {
+            0%, 100% { box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+            50%      { box-shadow: 0 0 30px 5px rgba(220, 38, 38, 0.35); }
+        }
+        .tense-mode    { animation: tensePulse 1.2s ease-in-out infinite; }
+        .tense-extreme { animation: tensePulse 0.5s ease-in-out infinite; }
+
         #word-display {
             min-height: 4rem;
             flex-wrap: wrap;
@@ -55,7 +63,6 @@
         }
         #keyboard { margin-top: 20px; }
 
-        /* Botón de mute en la esquina */
         #mute-btn {
             position: absolute;
             top: 12px;
@@ -68,6 +75,7 @@
             cursor: pointer;
             font-size: 18px;
             transition: all 0.2s;
+            z-index: 10;
         }
         #mute-btn:hover { background: #e5e7eb; transform: scale(1.05); }
 
@@ -86,7 +94,6 @@
 
     <div id="game-container" class="bg-white p-6 md:p-8 rounded-2xl shadow-xl text-center max-w-2xl w-full mx-auto relative">
 
-        <!-- Botón de silencio -->
         <button id="mute-btn" title="Silenciar / Activar sonido" aria-label="Silenciar">🔊</button>
 
         <h1 class="text-4xl font-bold mb-4 text-gray-800">Juego del Ahorcado</h1>
@@ -151,7 +158,6 @@
             ctx: null,
             muted: false,
 
-            // Inicializa el AudioContext en la primera interacción del usuario
             init() {
                 if (this.ctx) return;
                 try {
@@ -162,7 +168,6 @@
                 }
             },
 
-            // Reproduce un tono simple con envolvente ADSR básica
             playTone({ freq = 440, duration = 0.2, type = 'sine', volume = 0.3, delay = 0 }) {
                 if (this.muted || !this.ctx) return;
                 const startTime = this.ctx.currentTime + delay;
@@ -172,7 +177,6 @@
                 osc.type = type;
                 osc.frequency.setValueAtTime(freq, startTime);
 
-                // Envolvente: attack -> decay rápido
                 gain.gain.setValueAtTime(0, startTime);
                 gain.gain.linearRampToValueAtTime(volume, startTime + 0.01);
                 gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
@@ -184,34 +188,23 @@
                 osc.stop(startTime + duration);
             },
 
-            // 🎵 Sonido al presionar una tecla (clic suave)
-            click() {
-                this.playTone({ freq: 800, duration: 0.05, type: 'square', volume: 0.05 });
-            },
-
-            // ✅ Letra correcta: dos tonos ascendentes alegres
+            click()   { this.playTone({ freq: 800, duration: 0.05, type: 'square', volume: 0.05 }); },
             correct() {
-                this.playTone({ freq: 587.33, duration: 0.12, type: 'sine', volume: 0.25 });            // Re5
-                this.playTone({ freq: 783.99, duration: 0.18, type: 'sine', volume: 0.25, delay: 0.1 }); // Sol5
+                this.playTone({ freq: 587.33, duration: 0.12, type: 'sine', volume: 0.25 });
+                this.playTone({ freq: 783.99, duration: 0.18, type: 'sine', volume: 0.25, delay: 0.1 });
             },
-
-            // ❌ Letra incorrecta: tono grave de error
             wrong() {
                 this.playTone({ freq: 200, duration: 0.15, type: 'sawtooth', volume: 0.15 });
                 this.playTone({ freq: 150, duration: 0.25, type: 'sawtooth', volume: 0.15, delay: 0.1 });
             },
-
-            // 🎉 Victoria: arpegio mayor ascendente (Do - Mi - Sol - Do octava)
             win() {
-                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                const notes = [523.25, 659.25, 783.99, 1046.50];
                 notes.forEach((freq, i) => {
                     this.playTone({ freq, duration: 0.25, type: 'triangle', volume: 0.3, delay: i * 0.12 });
                 });
             },
-
-            // 😕 Derrota: descenso cromático triste
             lose() {
-                const notes = [392.00, 369.99, 349.23, 311.13]; // G4 - F#4 - F4 - Eb4
+                const notes = [392.00, 369.99, 349.23, 311.13];
                 notes.forEach((freq, i) => {
                     this.playTone({ freq, duration: 0.35, type: 'sine', volume: 0.25, delay: i * 0.18 });
                 });
@@ -219,7 +212,242 @@
 
             toggleMute() {
                 this.muted = !this.muted;
+                BGMusic.applyMute(this.muted);
                 return this.muted;
+            }
+        };
+
+        // =====================================================
+        //  MÚSICA DE FONDO DE TENSIÓN EXTREMA
+        // =====================================================
+        const BGMusic = {
+            isPlaying: false,
+            intensity: 0,
+            masterGain: null,
+            droneOsc: null,
+            droneFilter: null,
+            droneGain: null,
+            droneLfo: null,
+            droneLfoGain: null,
+            tritoneOsc: null,
+            tritoneGain: null,
+            heartbeatTimer: null,
+            stingerTimer: null,
+            highStringOsc: null,
+            highStringGain: null,
+
+            start() {
+                if (!SoundManager.ctx || this.isPlaying) return;
+                this.isPlaying = true;
+                this.intensity = 0;
+                const ctx = SoundManager.ctx;
+                const now = ctx.currentTime;
+
+                // Master gain con fade-in suave (entrada cinematográfica)
+                this.masterGain = ctx.createGain();
+                this.masterGain.gain.setValueAtTime(0, now);
+                this.masterGain.gain.linearRampToValueAtTime(SoundManager.muted ? 0 : 1, now + 2.5);
+                this.masterGain.connect(ctx.destination);
+
+                // ---------- CAPA 1: DRONE BAJO SINIESTRO (La1, 55Hz) ----------
+                this.droneOsc = ctx.createOscillator();
+                this.droneOsc.type = 'sawtooth';
+                this.droneOsc.frequency.value = 55;
+
+                this.droneFilter = ctx.createBiquadFilter();
+                this.droneFilter.type = 'lowpass';
+                this.droneFilter.frequency.value = 180;
+                this.droneFilter.Q.value = 6;
+
+                // LFO lento que hace "respirar" el filtro
+                this.droneLfo = ctx.createOscillator();
+                this.droneLfo.frequency.value = 0.13;
+                this.droneLfoGain = ctx.createGain();
+                this.droneLfoGain.gain.value = 60;
+                this.droneLfo.connect(this.droneLfoGain);
+                this.droneLfoGain.connect(this.droneFilter.frequency);
+
+                this.droneGain = ctx.createGain();
+                this.droneGain.gain.value = 0.10;
+
+                this.droneOsc.connect(this.droneFilter);
+                this.droneFilter.connect(this.droneGain);
+                this.droneGain.connect(this.masterGain);
+
+                this.droneOsc.start();
+                this.droneLfo.start();
+
+                // ---------- CAPA 2: TRITONO (intervalo del diablo) ----------
+                // 55Hz × √2 ≈ 77.78Hz → tritono = máxima disonancia musical
+                this.tritoneOsc = ctx.createOscillator();
+                this.tritoneOsc.type = 'sine';
+                this.tritoneOsc.frequency.value = 77.78;
+                this.tritoneGain = ctx.createGain();
+                this.tritoneGain.gain.value = 0.05;
+                this.tritoneOsc.connect(this.tritoneGain);
+                this.tritoneGain.connect(this.masterGain);
+                this.tritoneOsc.start();
+
+                // ---------- CAPA 3: CUERDA AGUDA SOSTENIDA (sube con tensión) ----------
+                this.highStringOsc = ctx.createOscillator();
+                this.highStringOsc.type = 'sawtooth';
+                this.highStringOsc.frequency.value = 440;
+                const highFilter = ctx.createBiquadFilter();
+                highFilter.type = 'bandpass';
+                highFilter.frequency.value = 1200;
+                highFilter.Q.value = 4;
+                this.highStringGain = ctx.createGain();
+                this.highStringGain.gain.value = 0.0;
+
+                this.highStringOsc.connect(highFilter);
+                highFilter.connect(this.highStringGain);
+                this.highStringGain.connect(this.masterGain);
+                this.highStringOsc.start();
+
+                // ---------- CAPA 4: LATIDOS DEL CORAZÓN ----------
+                this.scheduleHeartbeat();
+
+                // ---------- CAPA 5: STINGERS DISONANTES OCASIONALES ----------
+                this.scheduleStinger();
+            },
+
+            playHeartbeat() {
+                if (!SoundManager.ctx || !this.isPlaying || SoundManager.muted) return;
+                const ctx = SoundManager.ctx;
+                const now = ctx.currentTime;
+
+                // Lub-dub: dos golpes graves (kick drum sintético)
+                for (let i = 0; i < 2; i++) {
+                    const t = now + i * 0.14;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(80, t);
+                    osc.frequency.exponentialRampToValueAtTime(28, t + 0.12);
+
+                    const peak = (i === 0 ? 0.55 : 0.38) * (0.7 + this.intensity * 0.05);
+                    gain.gain.setValueAtTime(0, t);
+                    gain.gain.linearRampToValueAtTime(peak, t + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+                    osc.connect(gain);
+                    gain.connect(this.masterGain);
+                    osc.start(t);
+                    osc.stop(t + 0.22);
+                }
+            },
+
+            scheduleHeartbeat() {
+                if (!this.isPlaying) return;
+                // Tempo se acelera con la tensión: de 1.2s/latido a 0.35s/latido
+                const intervals = [1.2, 1.0, 0.85, 0.7, 0.55, 0.45, 0.35];
+                const interval = intervals[Math.min(this.intensity, 6)] * 1000;
+
+                this.playHeartbeat();
+                this.heartbeatTimer = setTimeout(() => this.scheduleHeartbeat(), interval);
+            },
+
+            playStinger() {
+                if (!SoundManager.ctx || !this.isPlaying || SoundManager.muted) return;
+                const ctx = SoundManager.ctx;
+                const now = ctx.currentTime;
+
+                // Cluster disonante de cuerdas agudas (estilo "Psycho" de Hitchcock)
+                const baseFreqs = [880, 932.33, 1244.51]; // A5, Bb5, Eb6
+                baseFreqs.forEach(freq => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = freq + (Math.random() * 6 - 3);
+
+                    const filter = ctx.createBiquadFilter();
+                    filter.type = 'highpass';
+                    filter.frequency.value = 600;
+
+                    gain.gain.setValueAtTime(0, now);
+                    gain.gain.linearRampToValueAtTime(0.05, now + 0.04);
+                    gain.gain.linearRampToValueAtTime(0.04, now + 0.5);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(this.masterGain);
+                    osc.start(now);
+                    osc.stop(now + 1.05);
+                });
+            },
+
+            scheduleStinger() {
+                if (!this.isPlaying) return;
+                // Más frecuente conforme aumenta la tensión
+                const minDelay = Math.max(2, 7 - this.intensity);
+                const maxDelay = Math.max(5, 13 - this.intensity);
+                const delay = (minDelay + Math.random() * (maxDelay - minDelay)) * 1000;
+
+                this.stingerTimer = setTimeout(() => {
+                    this.playStinger();
+                    this.scheduleStinger();
+                }, delay);
+            },
+
+            setIntensity(level) {
+                this.intensity = level;
+                if (!SoundManager.ctx) return;
+                const ctx = SoundManager.ctx;
+                const now = ctx.currentTime;
+
+                // Filtro del drone se abre con la tensión (más brillante = más estresante)
+                if (this.droneFilter) {
+                    this.droneFilter.frequency.linearRampToValueAtTime(180 + level * 90, now + 0.6);
+                }
+                // Cuerda aguda sube gradualmente
+                if (this.highStringGain) {
+                    this.highStringGain.gain.linearRampToValueAtTime(
+                        Math.min(level * 0.012, 0.07), now + 0.6
+                    );
+                }
+                // Tritono también se hace más presente
+                if (this.tritoneGain) {
+                    this.tritoneGain.gain.linearRampToValueAtTime(0.05 + level * 0.012, now + 0.6);
+                }
+
+                // Pulso visual rojo en el contenedor
+                const container = document.getElementById('game-container');
+                container.classList.remove('tense-mode', 'tense-extreme');
+                if (level >= 5)      container.classList.add('tense-extreme');
+                else if (level >= 3) container.classList.add('tense-mode');
+            },
+
+            applyMute(muted) {
+                if (!this.masterGain || !SoundManager.ctx) return;
+                const now = SoundManager.ctx.currentTime;
+                this.masterGain.gain.cancelScheduledValues(now);
+                this.masterGain.gain.linearRampToValueAtTime(muted ? 0 : 1, now + 0.3);
+            },
+
+            stop() {
+                if (!this.isPlaying) return;
+                this.isPlaying = false;
+
+                clearTimeout(this.heartbeatTimer);
+                clearTimeout(this.stingerTimer);
+
+                if (SoundManager.ctx && this.masterGain) {
+                    const now = SoundManager.ctx.currentTime;
+                    this.masterGain.gain.cancelScheduledValues(now);
+                    this.masterGain.gain.linearRampToValueAtTime(0, now + 0.6);
+
+                    setTimeout(() => {
+                        try { this.droneOsc?.stop(); } catch (e) {}
+                        try { this.tritoneOsc?.stop(); } catch (e) {}
+                        try { this.droneLfo?.stop(); } catch (e) {}
+                        try { this.highStringOsc?.stop(); } catch (e) {}
+                    }, 700);
+                }
+
+                document.getElementById('game-container')
+                        .classList.remove('tense-mode', 'tense-extreme');
+                this.intensity = 0;
             }
         };
 
@@ -249,7 +477,6 @@
         const wrongCountDisplay = document.getElementById('wrong-count');
         const muteBtn = document.getElementById('mute-btn');
 
-        // Estado del juego
         let wordList = [];
         let selectedWord = '';
         let correctLetters = [];
@@ -271,10 +498,8 @@
             muteBtn.title = isMuted ? 'Activar sonido' : 'Silenciar';
         });
 
-        // Cualquier clic inicializa el AudioContext (política de autoplay)
         document.addEventListener('click', () => SoundManager.init(), { once: true });
 
-        // Soporte para teclado físico
         document.addEventListener('keydown', (e) => {
             if (gameSection.classList.contains('hidden') || isGameOver) return;
             const letter = e.key.toUpperCase();
@@ -326,6 +551,7 @@
         }
 
         function showFileUpload() {
+            BGMusic.stop();
             wordNumberSelectionSection.classList.add('hidden');
             gameSection.classList.add('hidden');
             fileUploadSection.classList.remove('hidden');
@@ -336,6 +562,7 @@
         }
 
         function showWordNumberSelection() {
+            BGMusic.stop();
             gameSection.classList.add('hidden');
             fileUploadSection.classList.add('hidden');
             wordNumberSelectionSection.classList.remove('hidden');
@@ -372,6 +599,10 @@
             updateWrongCount();
             displayWord();
             generateKeyboard();
+
+            // 🎵 ¡Empezar la música de tensión!
+            SoundManager.init();
+            BGMusic.start();
         }
 
         function displayWord(revealAll = false) {
@@ -408,8 +639,8 @@
 
         function handleGuess(letter, button) {
             if (isGameOver) return;
-            SoundManager.init();         // Garantiza el AudioContext
-            SoundManager.click();        // Sonido sutil de tecla
+            SoundManager.init();
+            SoundManager.click();
             button.disabled = true;
 
             if (selectedWord.includes(letter)) {
@@ -417,7 +648,7 @@
                 button.classList.replace('bg-gray-200', 'bg-green-400');
                 button.classList.add('text-white');
                 displayWord();
-                SoundManager.correct();  // 🎵 Sonido de letra correcta
+                SoundManager.correct();
 
                 const allRevealed = selectedWord.split('').every(l => correctLetters.includes(l));
                 if (allRevealed) endGame(true);
@@ -428,7 +659,10 @@
                 const part = document.getElementById(HANGMAN_PARTS[wrongGuesses - 1]);
                 if (part) part.style.visibility = 'visible';
                 updateWrongCount();
-                SoundManager.wrong();    // 🎵 Sonido de letra incorrecta
+                SoundManager.wrong();
+
+                // 🎵 Subir la tensión de la música de fondo
+                BGMusic.setIntensity(wrongGuesses);
 
                 if (wrongGuesses >= MAX_WRONG_GUESSES) endGame(false);
             }
@@ -438,16 +672,18 @@
             isGameOver = true;
             keyboardDiv.querySelectorAll('button').forEach(btn => btn.disabled = true);
 
+            // 🎵 Detener la música de tensión
+            BGMusic.stop();
+
             if (isWin) {
                 gameOverMessage.textContent = '🎉 ¡Felicidades, ganaste! 🎉';
                 gameOverMessage.classList.add('text-green-600');
-                // Pequeño delay para que el sonido de "correct" no se solape
-                setTimeout(() => SoundManager.win(), 200);
+                setTimeout(() => SoundManager.win(), 300);
             } else {
                 displayWord(true);
                 gameOverMessage.textContent = `😕 ¡Perdiste! La palabra era: ${selectedWord}`;
                 gameOverMessage.classList.add('text-red-600');
-                setTimeout(() => SoundManager.lose(), 200);
+                setTimeout(() => SoundManager.lose(), 300);
             }
             playAgainBtn.classList.remove('hidden');
         }
