@@ -26,21 +26,18 @@
             stroke-width: 8;
             fill: none;
             stroke-linecap: round;
-            visibility: visible;
         }
         .leaves {
             fill: #2E8B57;
             stroke: #228B22;
             stroke-width: 1;
-            visibility: visible;
         }
         @keyframes fadeIn {
             from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
+            to   { opacity: 1; transform: scale(1); }
         }
-        .fade-in {
-            animation: fadeIn 0.5s ease-out forwards;
-        }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+
         #word-display {
             min-height: 4rem;
             flex-wrap: wrap;
@@ -48,36 +45,50 @@
             align-items: flex-start;
             display: flex;
         }
-        #word-display span {
-            margin: 0 4px;
-        }
+        #word-display span { margin: 0 4px; }
+
         #game-section {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
         }
-        #keyboard {
-            margin-top: 20px;
+        #keyboard { margin-top: 20px; }
+
+        /* Botón de mute en la esquina */
+        #mute-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
         }
+        #mute-btn:hover { background: #e5e7eb; transform: scale(1.05); }
+
         @media (max-width: 640px) {
             #word-display span {
                 margin: 0 2px;
                 width: 6vw;
                 height: 6vw;
             }
-            #keyboard {
-                gap: 4px;
-            }
-            .w-10, .h-10 {
-                width: 8vw;
-                height: 8vw;
-            }
+            #keyboard { gap: 4px; }
+            .w-10, .h-10 { width: 8vw; height: 8vw; }
         }
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen font-sans p-4">
-    <div id="game-container" class="bg-white p-6 md:p-8 rounded-2xl shadow-xl text-center max-w-2xl w-full mx-auto">
+
+    <div id="game-container" class="bg-white p-6 md:p-8 rounded-2xl shadow-xl text-center max-w-2xl w-full mx-auto relative">
+
+        <!-- Botón de silencio -->
+        <button id="mute-btn" title="Silenciar / Activar sonido" aria-label="Silenciar">🔊</button>
+
         <h1 class="text-4xl font-bold mb-4 text-gray-800">Juego del Ahorcado</h1>
 
         <!-- SECCIÓN DE CARGA DE ARCHIVO -->
@@ -115,21 +126,17 @@
                 <path d="M 80 50 Q 90 20, 160 20" class="tree" />
                 <line x1="160" y1="20" x2="160" y2="50" class="gallows" />
                 <circle cx="160" cy="70" r="20" class="hangman-part" id="head" />
-                <line x1="160" y1="90" x2="160" y2="150" class="hangman-part" id="body" />
+                <line x1="160" y1="90"  x2="160" y2="150" class="hangman-part" id="body" />
                 <line x1="160" y1="110" x2="130" y2="130" class="hangman-part" id="left-arm" />
                 <line x1="160" y1="110" x2="190" y2="130" class="hangman-part" id="right-arm" />
                 <line x1="160" y1="150" x2="130" y2="180" class="hangman-part" id="left-leg" />
                 <line x1="160" y1="150" x2="190" y2="180" class="hangman-part" id="right-leg" />
             </svg>
-            <!-- Contador de errores -->
+
             <p id="wrong-count" class="text-gray-500 text-sm mb-2"></p>
-            <!-- Palabra a adivinar -->
             <div id="word-display" class="text-2xl md:text-4xl tracking-widest my-6 font-mono text-gray-700"></div>
-            <!-- Teclado en pantalla -->
             <div id="keyboard" class="flex flex-wrap justify-center gap-2 max-w-lg mx-auto"></div>
-            <!-- Mensaje de fin de juego -->
             <div id="game-over-message" class="mt-6 text-2xl font-bold h-12"></div>
-            <!-- Botón para volver a jugar -->
             <button id="play-again-btn" class="hidden mt-2 bg-violet-600 text-white px-8 py-3 rounded-lg hover:bg-violet-700 transition-transform hover:scale-105 shadow-lg">
                 Jugar de Nuevo
             </button>
@@ -137,15 +144,94 @@
     </div>
 
     <script>
-        // --- Constantes ---
+        // =====================================================
+        //  GESTOR DE SONIDOS (Web Audio API - sin archivos)
+        // =====================================================
+        const SoundManager = {
+            ctx: null,
+            muted: false,
+
+            // Inicializa el AudioContext en la primera interacción del usuario
+            init() {
+                if (this.ctx) return;
+                try {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                } catch (e) {
+                    console.warn('Web Audio API no soportada en este navegador.');
+                }
+            },
+
+            // Reproduce un tono simple con envolvente ADSR básica
+            playTone({ freq = 440, duration = 0.2, type = 'sine', volume = 0.3, delay = 0 }) {
+                if (this.muted || !this.ctx) return;
+                const startTime = this.ctx.currentTime + delay;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, startTime);
+
+                // Envolvente: attack -> decay rápido
+                gain.gain.setValueAtTime(0, startTime);
+                gain.gain.linearRampToValueAtTime(volume, startTime + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(startTime);
+                osc.stop(startTime + duration);
+            },
+
+            // 🎵 Sonido al presionar una tecla (clic suave)
+            click() {
+                this.playTone({ freq: 800, duration: 0.05, type: 'square', volume: 0.05 });
+            },
+
+            // ✅ Letra correcta: dos tonos ascendentes alegres
+            correct() {
+                this.playTone({ freq: 587.33, duration: 0.12, type: 'sine', volume: 0.25 });            // Re5
+                this.playTone({ freq: 783.99, duration: 0.18, type: 'sine', volume: 0.25, delay: 0.1 }); // Sol5
+            },
+
+            // ❌ Letra incorrecta: tono grave de error
+            wrong() {
+                this.playTone({ freq: 200, duration: 0.15, type: 'sawtooth', volume: 0.15 });
+                this.playTone({ freq: 150, duration: 0.25, type: 'sawtooth', volume: 0.15, delay: 0.1 });
+            },
+
+            // 🎉 Victoria: arpegio mayor ascendente (Do - Mi - Sol - Do octava)
+            win() {
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, i) => {
+                    this.playTone({ freq, duration: 0.25, type: 'triangle', volume: 0.3, delay: i * 0.12 });
+                });
+            },
+
+            // 😕 Derrota: descenso cromático triste
+            lose() {
+                const notes = [392.00, 369.99, 349.23, 311.13]; // G4 - F#4 - F4 - Eb4
+                notes.forEach((freq, i) => {
+                    this.playTone({ freq, duration: 0.35, type: 'sine', volume: 0.25, delay: i * 0.18 });
+                });
+            },
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+        };
+
+        // =====================================================
+        //  Constantes y Elementos del DOM
+        // =====================================================
         const MAX_WRONG_GUESSES = 6;
         const HANGMAN_PARTS = ['head', 'body', 'left-arm', 'right-arm', 'left-leg', 'right-leg'];
-        // Regex para limpiar caracteres no válidos, preservando vocales acentuadas y Ñ
         const INVALID_CHARS_RE = /[^A-ZÁÉÍÓÚÜÑ]/g;
         const ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
         const ACCENTED_VOWELS = 'ÁÉÍÓÚÜ';
 
-        // --- Elementos del DOM ---
         const fileUploadSection = document.getElementById('file-upload-section');
         const wordNumberSelectionSection = document.getElementById('word-number-selection-section');
         const gameSection = document.getElementById('game-section');
@@ -161,21 +247,34 @@
         const gameOverMessage = document.getElementById('game-over-message');
         const playAgainBtn = document.getElementById('play-again-btn');
         const wrongCountDisplay = document.getElementById('wrong-count');
+        const muteBtn = document.getElementById('mute-btn');
 
-        // --- Estado del juego ---
+        // Estado del juego
         let wordList = [];
         let selectedWord = '';
         let correctLetters = [];
         let wrongGuesses = 0;
         let isGameOver = false;
 
-        // --- Event Listeners ---
+        // =====================================================
+        //  Event Listeners
+        // =====================================================
         fileInput.addEventListener('change', handleFileSelect);
-        startGameNumberBtn.addEventListener('click', handleNumberSelection);
+        startGameNumberBtn.addEventListener('click', () => { SoundManager.init(); handleNumberSelection(); });
         cancelNumberSelectionBtn.addEventListener('click', showFileUpload);
         playAgainBtn.addEventListener('click', showWordNumberSelection);
 
-        // Soporte para teclado físico durante el juego
+        muteBtn.addEventListener('click', () => {
+            SoundManager.init();
+            const isMuted = SoundManager.toggleMute();
+            muteBtn.textContent = isMuted ? '🔇' : '🔊';
+            muteBtn.title = isMuted ? 'Activar sonido' : 'Silenciar';
+        });
+
+        // Cualquier clic inicializa el AudioContext (política de autoplay)
+        document.addEventListener('click', () => SoundManager.init(), { once: true });
+
+        // Soporte para teclado físico
         document.addEventListener('keydown', (e) => {
             if (gameSection.classList.contains('hidden') || isGameOver) return;
             const letter = e.key.toUpperCase();
@@ -186,15 +285,12 @@
             }
         });
 
-        /**
-         * Maneja la selección de un archivo .docx, lo lee y extrae las palabras.
-         */
+        // =====================================================
+        //  Lógica del Juego
+        // =====================================================
         function handleFileSelect(event) {
             const file = event.target.files[0];
-            if (!file) {
-                fileStatus.textContent = 'No se seleccionó ningún archivo.';
-                return;
-            }
+            if (!file) { fileStatus.textContent = 'No se seleccionó ningún archivo.'; return; }
             if (!file.name.endsWith('.docx')) {
                 fileStatus.textContent = 'Por favor, sube un archivo .docx válido.';
                 return;
@@ -211,10 +307,6 @@
             reader.readAsArrayBuffer(file);
         }
 
-        /**
-         * Procesa el texto extraído para obtener una lista de palabras válidas.
-         * Preserva vocales acentuadas (Á, É, Í, Ó, Ú, Ü) y la Ñ.
-         */
         function processTextToWordList(text) {
             if (!text || !text.trim()) {
                 fileStatus.textContent = 'El archivo está vacío o no contiene texto.';
@@ -233,9 +325,6 @@
             showWordNumberSelection();
         }
 
-        /**
-         * Muestra la sección de carga de archivo y resetea el estado.
-         */
         function showFileUpload() {
             wordNumberSelectionSection.classList.add('hidden');
             gameSection.classList.add('hidden');
@@ -246,9 +335,6 @@
             selectedWord = '';
         }
 
-        /**
-         * Muestra la sección para seleccionar la palabra por número.
-         */
         function showWordNumberSelection() {
             gameSection.classList.add('hidden');
             fileUploadSection.classList.add('hidden');
@@ -263,9 +349,6 @@
             numberSelectionStatus.textContent = '';
         }
 
-        /**
-         * Valida el número ingresado y selecciona la palabra correspondiente.
-         */
         function handleNumberSelection() {
             const selectedNumber = parseInt(wordNumberInput.value, 10);
             if (isNaN(selectedNumber) || selectedNumber < 1 || selectedNumber > wordList.length) {
@@ -276,9 +359,6 @@
             startGame();
         }
 
-        /**
-         * Inicia una nueva partida con la palabra seleccionada.
-         */
         function startGame() {
             wrongGuesses = 0;
             correctLetters = [];
@@ -294,10 +374,6 @@
             generateKeyboard();
         }
 
-        /**
-         * Renderiza la palabra con guiones bajos para letras no descubiertas.
-         * Acepta un parámetro opcional para revelar todas las letras (al perder).
-         */
         function displayWord(revealAll = false) {
             wordDisplay.innerHTML = selectedWord
                 .split('')
@@ -310,17 +386,10 @@
                 .join('');
         }
 
-        /**
-         * Actualiza el contador de errores visible al jugador.
-         */
         function updateWrongCount() {
             wrongCountDisplay.textContent = `Errores: ${wrongGuesses} / ${MAX_WRONG_GUESSES}`;
         }
 
-        /**
-         * Genera el teclado en pantalla con el alfabeto español completo,
-         * incluyendo vocales acentuadas.
-         */
         function generateKeyboard() {
             keyboardDiv.innerHTML = '';
             (ALPHABET + ACCENTED_VOWELS).split('').forEach(letter => {
@@ -337,12 +406,10 @@
             });
         }
 
-        /**
-         * Maneja la lógica de adivinar una letra: actualiza el estado,
-         * verifica victoria o derrota, y actualiza la UI.
-         */
         function handleGuess(letter, button) {
             if (isGameOver) return;
+            SoundManager.init();         // Garantiza el AudioContext
+            SoundManager.click();        // Sonido sutil de tecla
             button.disabled = true;
 
             if (selectedWord.includes(letter)) {
@@ -350,7 +417,8 @@
                 button.classList.replace('bg-gray-200', 'bg-green-400');
                 button.classList.add('text-white');
                 displayWord();
-                // Victoria: todas las letras únicas de la palabra fueron adivinadas
+                SoundManager.correct();  // 🎵 Sonido de letra correcta
+
                 const allRevealed = selectedWord.split('').every(l => correctLetters.includes(l));
                 if (allRevealed) endGame(true);
             } else {
@@ -360,14 +428,12 @@
                 const part = document.getElementById(HANGMAN_PARTS[wrongGuesses - 1]);
                 if (part) part.style.visibility = 'visible';
                 updateWrongCount();
+                SoundManager.wrong();    // 🎵 Sonido de letra incorrecta
+
                 if (wrongGuesses >= MAX_WRONG_GUESSES) endGame(false);
             }
         }
 
-        /**
-         * Finaliza el juego: deshabilita el teclado, muestra el resultado
-         * y revela la palabra completa en caso de derrota.
-         */
         function endGame(isWin) {
             isGameOver = true;
             keyboardDiv.querySelectorAll('button').forEach(btn => btn.disabled = true);
@@ -375,10 +441,13 @@
             if (isWin) {
                 gameOverMessage.textContent = '🎉 ¡Felicidades, ganaste! 🎉';
                 gameOverMessage.classList.add('text-green-600');
+                // Pequeño delay para que el sonido de "correct" no se solape
+                setTimeout(() => SoundManager.win(), 200);
             } else {
-                displayWord(true); // Revela la palabra completa, marcando letras no adivinadas en rojo
+                displayWord(true);
                 gameOverMessage.textContent = `😕 ¡Perdiste! La palabra era: ${selectedWord}`;
                 gameOverMessage.classList.add('text-red-600');
+                setTimeout(() => SoundManager.lose(), 200);
             }
             playAgainBtn.classList.remove('hidden');
         }
