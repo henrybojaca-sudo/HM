@@ -1,390 +1,448 @@
-import io
-import random
-
-import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
+import pandas as pd
+import random
+import math, wave, struct, io, base64
 
-from Cds_Mundo import data as default_data
-
-# ── Configuración de página ───────────────────────────────────────────────────
 st.set_page_config(
-    page_title="CDS Game",
-    page_icon="📊",
+    page_title="CDS Challenge",
+    page_icon="🌍",
     layout="centered",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# ── Estilos ───────────────────────────────────────────────────────────────────
-st.markdown("""
+COUNTRY_ISO = {
+    "Estados Unidos":"us","Brasil":"br","Colombia":"co","Chile":"cl",
+    "México":"mx","Panamá":"pa","Perú":"pe","Argentina":"ar",
+    "Ecuador":"ec","Costa Rica":"cr","Canadá":"ca","El Salvador":"sv",
+    "Guatemala":"gt","Uruguay":"uy","Nicaragua":"ni","Reino Unido":"gb",
+    "Francia":"fr","Alemania":"de","Italia":"it","España":"es",
+    "Portugal":"pt","Suecia":"se","Países Bajos":"nl","Suiza":"ch",
+    "Grecia":"gr","Austria":"at","Bélgica":"be","Bulgaria":"bg",
+    "Croacia":"hr","Dinamarca":"dk","Egipto":"eg","Finlandia":"fi",
+    "Hungría":"hu","Israel":"il","Kazajistán":"kz","Polonia":"pl",
+    "Qatar":"qa","Rumanía":"ro","Eslovaquia":"sk","Sudáfrica":"za",
+    "Checa":"cz","Eslovenia":"si","Letonia":"lv","Lituania":"lt",
+    "Estonia":"ee","Serbia":"rs","Bahrein":"bh","Nigeria":"ng",
+    "Argelia":"dz","Irak":"iq","Chipre":"cy","Dubai":"ae",
+    "Irlanda":"ie","Noruega":"no","Arabia Saudita":"sa","Kuwait":"kw",
+    "Omán":"om","Tunisia":"tn","Turquía":"tr","Islanda":"is",
+    "Abu Dhabi":"ae","Marruecos":"ma","Ghana":"gh","Gabón":"ga",
+    "Kenia":"ke","Angola":"ao","Camerún":"cm","Ruanda":"rw",
+    "Senegal":"sn","Zambia":"zm","Etiopía":"et","Namibia":"na",
+    "Japón":"jp","Australia":"au","N. Zelanda":"nz","Sur Corea":"kr",
+    "China":"cn","Hong Kong":"hk","India":"in","Indonesia":"id",
+    "Malasia":"my","Filipinas":"ph","Pakistán":"pk","Tailandia":"th",
+    "Vietnam":"vn","Mongolia":"mn",
+}
+
+DEFAULT_DATA = [
+    ("Estados Unidos",38.73),("Brasil",133.76),("Colombia",228.29),
+    ("Chile",51.69),("México",91.32),("Panamá",116.45),
+    ("Perú",74.00),("Argentina",565.16),("Ecuador",432.57),
+    ("Costa Rica",155.35),("Canadá",19.54),("El Salvador",283.89),
+    ("Guatemala",157.60),("Uruguay",61.38),("Nicaragua",479.35),
+    ("Reino Unido",17.96),("Francia",28.24),("Alemania",9.10),
+    ("Italia",28.72),("España",18.63),("Portugal",17.78),
+    ("Suecia",8.27),("Países Bajos",7.78),("Suiza",13.55),
+    ("Grecia",29.37),("Austria",14.70),("Bélgica",17.05),
+    ("Bulgaria",53.62),("Croacia",61.07),("Dinamarca",8.75),
+    ("Egipto",345.72),("Finlandia",13.63),("Hungría",103.29),
+    ("Israel",87.49),("Kazajistán",94.19),("Polonia",63.62),
+    ("Qatar",41.92),("Rumanía",136.76),("Eslovaquia",40.39),
+    ("Sudáfrica",152.82),("Checa",30.31),("Eslovenia",35.43),
+    ("Letonia",56.71),("Lituania",59.50),("Estonia",67.60),
+    ("Serbia",146.45),("Bahrein",255.17),("Nigeria",327.19),
+    ("Argelia",91.67),("Irak",298.02),("Chipre",48.62),
+    ("Dubai",66.18),("Irlanda",16.49),("Noruega",9.07),
+    ("Arabia Saudita",84.83),("Kuwait",62.19),("Omán",90.34),
+    ("Tunisia",715.47),("Turquía",252.87),("Islanda",36.78),
+    ("Abu Dhabi",43.14),("Marruecos",86.40),("Ghana",361.73),
+    ("Gabón",760.72),("Kenia",401.32),("Angola",572.79),
+    ("Camerún",640.01),("Ruanda",378.01),("Senegal",1084.97),
+    ("Zambia",368.87),("Etiopía",3432.69),("Namibia",297.74),
+    ("Japón",26.87),("Australia",14.67),("N. Zelanda",14.69),
+    ("Sur Corea",27.18),("China",46.74),("Hong Kong",28.64),
+    ("India",58.63),("Indonesia",88.89),("Malasia",44.57),
+    ("Filipinas",68.13),("Pakistán",519.72),("Tailandia",46.82),
+    ("Vietnam",87.35),("Mongolia",232.40),
+]
+
+NON_COUNTRIES = {"América","EMEA","Asia/Pacífico","Name"}
+
+@st.cache_data
+def _gameover_wav() -> bytes:
+    SR = 22050
+    NOTES = [
+        (523.25, 0.20), (392.00, 0.20), (0, 0.20),
+        (415.30, 0.40), (392.00, 0.40), (0, 0.20),
+        (349.23, 0.60), (329.63, 0.30), (293.66, 0.30), (261.63, 1.00),
+    ]
+    samples = []
+    for freq, dur in NOTES:
+        n = int(SR * dur)
+        if freq == 0:
+            samples.extend([0] * n)
+        else:
+            for i in range(n):
+                env = min(1.0, i / (SR * 0.008)) * max(0.0, 1.0 - i / n * 0.15)
+                v = env * 0.30 * (1 if math.sin(2 * math.pi * freq * i / SR) > 0 else -1)
+                samples.append(max(-32767, min(32767, int(v * 32767))))
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(SR)
+        wf.writeframes(struct.pack(f'<{len(samples)}h', *samples))
+    return buf.getvalue()
+
+@st.cache_data
+def _mario_wav() -> bytes:
+    SR = 22050
+    T = 60.0 / 185
+    MELODY = [
+        (659.25,.5),(659.25,.5),(0,.5),(659.25,.5),(0,.5),(523.25,.5),(659.25,1),
+        (783.99,1),(0,1),(392.00,1),(0,1),
+        (523.25,1.5),(0,.5),(392.00,1.5),(0,.5),(329.63,1.5),(0,.5),
+        (440.00,1),(0,.5),(493.88,1),(0,.5),(466.16,.5),(440.00,1),
+        (392.00,.67),(659.25,.67),(783.99,.67),
+        (880.00,1),(0,.5),(698.46,.5),(783.99,.5),
+        (0,.5),(659.25,1),(0,.5),(523.25,.5),(587.33,.5),(493.88,1.5),(0,.5),
+        (523.25,1.5),(0,.5),(392.00,1.5),(0,.5),(329.63,1.5),(0,.5),
+        (440.00,1),(0,.5),(493.88,1),(0,.5),(466.16,.5),(440.00,1),
+        (392.00,.67),(659.25,.67),(783.99,.67),
+        (880.00,1),(0,.5),(698.46,.5),(783.99,.5),
+        (0,.5),(659.25,1),(0,.5),(523.25,.5),(587.33,.5),(493.88,1.5),(0,.5),
+        (659.25,.5),(523.25,.5),(0,.5),(440.00,.5),(0,1),(415.30,.5),(392.00,.5),
+        (0,.5),(493.88,.5),(0,.5),(466.16,.5),(440.00,.5),(0,.5),(523.25,.5),(0,.5),
+        (587.33,.5),(523.25,.5),(587.33,1),(0,.5),(587.33,.5),(523.25,.5),(440.00,.5),
+        (0,.5),(392.00,.5),(329.63,.5),(392.00,.5),(440.00,1.5),(0,.5),
+        (698.46,.5),(698.46,1),(698.46,1),
+        (0,.5),(659.25,.5),(659.25,.5),(659.25,.5),
+        (0,.5),(523.25,.5),(659.25,1),
+        (783.99,1),(0,1),(392.00,1),(0,1),
+    ]
+    samples = []
+    for freq, beats in MELODY:
+        n = int(SR * beats * T)
+        if freq == 0:
+            samples.extend([0] * n)
+        else:
+            for i in range(n):
+                env = min(1.0, i / (SR * 0.008)) * max(0.0, 1.0 - i / n * 0.12)
+                v = env * 0.28 * (1 if math.sin(2 * math.pi * freq * i / SR) > 0 else -1)
+                samples.append(max(-32767, min(32767, int(v * 32767))))
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(SR)
+        wf.writeframes(struct.pack(f'<{len(samples)}h', *samples))
+    return buf.getvalue()
+
+
+def load_excel(f):
+    try:
+        raw = pd.read_excel(f, header=None)
+        rows = []
+        for _, row in raw.iterrows():
+            name = str(row[0]).strip()
+            if name in NON_COUNTRIES or name == "nan":
+                continue
+            try:
+                rows.append((name, round(float(row[2]), 2)))
+            except (TypeError, ValueError, IndexError):
+                continue
+        if len(rows) < 2:
+            st.error("Necesitas al menos 2 países con CDS en columna C.")
+            return None
+        return pd.DataFrame(rows, columns=["Pais","CDS"]).reset_index(drop=True)
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return None
+
+
+def default_df():
+    return pd.DataFrame(DEFAULT_DATA, columns=["Pais","CDS"])
+
+
+def pick_pair(df, used):
+    idx = list(df.index)
+    cands = [(i,j) for i in idx for j in idx if i<j and (i,j) not in used]
+    return random.choice(cands) if cands else None
+
+
+def init_state():
+    for k,v in {"df":None,"score":0,"best":0,"game_over":False,
+                "game_started":False,"current_pair":None,"used_pairs":set(),
+                "feedback":None,"correct_country":None,"round_active":True}.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+    if st.session_state.df is None:
+        st.session_state.df = default_df()
+
+
+def reset_game():
+    st.session_state.update({"score":0,"game_over":False,"game_started":True,
+        "current_pair":None,"used_pairs":set(),"feedback":None,
+        "correct_country":None,"round_active":True})
+
+
+def advance():
+    st.session_state.feedback = None
+    st.session_state.correct_country = None
+    st.session_state.round_active = True
+    pair = pick_pair(st.session_state.df, st.session_state.used_pairs)
+    if pair is None:
+        st.session_state.game_over = True
+        st.session_state.feedback = "completed"
+    else:
+        st.session_state.current_pair = pair
+        st.session_state.used_pairs.add(pair)
+
+
+def inject_css():
+    st.markdown("""
 <style>
-#MainMenu {visibility: hidden;}
-footer     {visibility: hidden;}
-
-/* --- Título --- */
-.title-block { text-align: center; padding: 18px 0 6px; }
-.title-block h1 {
-    font-size: 2.8rem; font-weight: 900; letter-spacing: 4px;
-    color: #FFFFFF; margin: 0;
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');
+html,body,[class*="css"]{font-family:'DM Sans',sans-serif;}
+.stApp{background:#0a0f1e;}
+section[data-testid="stSidebar"]{background:#0d1426;}
+.game-header{text-align:center;padding:28px 0 8px;margin-bottom:4px;}
+.game-title{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#fff;letter-spacing:-.5px;margin:0;line-height:1.1;}
+.game-title span{color:#fbbf24;}
+.game-subtitle{color:#64748b;font-size:.85rem;margin-top:6px;letter-spacing:.05em;text-transform:uppercase;}
+.score-row{display:flex;justify-content:center;gap:10px;margin:16px 0 24px;flex-wrap:wrap;}
+.pill{display:flex;align-items:center;gap:6px;padding:6px 16px;border-radius:100px;font-size:.88rem;font-weight:600;}
+.pill-score{background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;}
+.pill-best{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25);color:#34d399;}
+.pill-countries{background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);color:#818cf8;}
+.question-label{text-align:center;color:#94a3b8;font-size:.9rem;font-weight:500;margin-bottom:20px;letter-spacing:.03em;text-transform:uppercase;}
+.vs-divider{display:flex;flex-direction:column;align-items:center;justify-content:center;height:160px;}
+.vs-text{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:#334155;letter-spacing:.15em;}
+.vs-line{width:1px;height:28px;background:linear-gradient(to bottom,transparent,#334155,transparent);margin:4px 0;}
+.flag-choice-card{
+    position:relative;border-radius:16px;overflow:hidden;height:160px;
+    box-shadow:0 6px 28px rgba(0,0,0,0.55);
+    border:2px solid #1e293b;
+    transition:border-color .2s, box-shadow .2s, transform .15s;
 }
-.title-block p { color: #888; font-size: 0.9rem; margin: 4px 0 0; }
-
-/* --- Score --- */
-.score-row { display: flex; justify-content: center; gap: 24px; margin: 12px 0 20px; }
-.score-chip {
-    background: #1a1d2e; border-radius: 20px;
-    padding: 8px 22px; font-size: 1rem; color: #fff; font-weight: 600;
-    border: 1px solid #2e3250;
-}
-.score-chip .val  { color: #4CAF50; }
-.score-chip .val2 { color: #FFD700; }
-
-/* --- Pregunta --- */
-.question {
-    text-align: center; font-size: 1.1rem; color: #bbb; margin-bottom: 16px;
-}
-.question strong { color: #fff; }
-
-/* --- Tarjetas de país --- */
-.card {
-    background: linear-gradient(145deg, #1a1d2e, #232742);
-    border-radius: 18px; padding: 26px 16px; text-align: center;
-    min-height: 185px; display: flex; flex-direction: column;
-    justify-content: center; align-items: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    border: 1px solid #2e3250;
-}
-.card-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 3px; color: #666; margin-bottom: 8px; }
-.card-flag  { line-height: 1; margin-bottom: 6px; min-height: 60px; display:flex; align-items:center; justify-content:center; }
-.card-name  { font-size: 1.25rem; font-weight: 800; color: #fff; }
-.card-region { font-size: 0.75rem; color: #666; margin-top: 3px; }
-.card-cds {
-    margin-top: 10px; font-size: 1rem; font-weight: 700; color: #FF6B6B;
-    background: rgba(255,107,107,0.12); border-radius: 8px; padding: 4px 12px;
-}
-
-/* --- VS --- */
-.vs-wrap { display:flex; align-items:center; justify-content:center; height:100%; }
-.vs-text { font-size: 2rem; font-weight: 900; color: #FF4B4B; }
-
-/* --- Feedback --- */
-.fb-correct {
-    background: rgba(40,167,69,0.12); border: 2px solid #28a745;
-    border-radius: 12px; padding: 16px 20px; text-align: center;
-    color: #4dff7c; font-size: 1.25rem; font-weight: 700; margin-top: 18px;
-}
-.fb-wrong {
-    background: rgba(220,53,69,0.12); border: 2px solid #dc3545;
-    border-radius: 12px; padding: 16px 20px; text-align: center;
-    color: #ff6b6b; font-size: 1.25rem; font-weight: 700; margin-top: 18px;
-}
-.fb-detail { font-size: 0.88rem; color: #ccc; margin-top: 6px; font-weight: 400; }
-
-/* --- Game Over --- */
-.go-box {
-    text-align: center; background: #1a1d2e;
-    border-radius: 18px; padding: 40px 30px; margin: 16px 0;
-    border: 1px solid #2e3250;
-}
-.go-box h2   { color: #FF4B4B; font-size: 2.2rem; margin-bottom: 6px; }
-.go-score    { font-size: 5rem; font-weight: 900; color: #FFD700; line-height: 1; }
-.go-label    { color: #888; font-size: 0.95rem; margin-top: 6px; }
-.go-hs       { color: #4CAF50; font-size: 1rem; margin-top: 14px; }
-.go-tip      { color: #666; font-size: 0.82rem; margin-top: 18px; font-style: italic; }
-
-/* --- Info CDS --- */
-.info-box {
-    background: #1a1d2e; border-radius: 12px; padding: 14px 18px;
-    border-left: 3px solid #4CAF50; margin-top: 28px; font-size: 0.83rem; color: #888;
-}
-.info-box strong { color: #aaa; }
+.flag-choice-card img{width:100%;height:100%;object-fit:cover;display:block;}
+.fcc-gradient{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.88) 0%,rgba(0,0,0,0.3) 55%,rgba(0,0,0,0.05) 100%);}
+.fcc-name{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-family:'Syne',sans-serif;font-weight:800;font-size:1.05rem;text-shadow:0 2px 10px rgba(0,0,0,1);letter-spacing:-.2px;}
+.fcc-hint{position:absolute;top:10px;right:10px;background:rgba(255,255,255,0.15);backdrop-filter:blur(4px);border-radius:20px;padding:3px 9px;font-size:.65rem;color:rgba(255,255,255,0.8);font-weight:600;letter-spacing:.05em;}
+.fcc-placeholder{width:100%;height:100%;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:3rem;}
+.flag-result-card{position:relative;border-radius:16px;overflow:hidden;height:160px;box-shadow:0 4px 20px rgba(0,0,0,0.5);}
+.flag-result-card img{width:100%;height:100%;object-fit:cover;display:block;}
+.flag-result-card .fcc-gradient{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.88) 0%,rgba(0,0,0,0.3) 55%,rgba(0,0,0,0.05) 100%);}
+.flag-result-card .fcc-name{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-family:'Syne',sans-serif;font-weight:800;font-size:1.05rem;text-shadow:0 2px 10px rgba(0,0,0,1);}
+div[data-testid="stButton"]>button{border-radius:12px!important;font-family:'DM Sans',sans-serif!important;font-weight:600!important;font-size:.9rem!important;padding:10px 16px!important;width:100%!important;transition:all .15s ease!important;border:1.5px solid #1e3a5f!important;background:linear-gradient(135deg,#0f2a4a,#0d1f3c)!important;color:#93c5fd!important;}
+div[data-testid="stButton"]>button:hover{border-color:#3b82f6!important;color:#bfdbfe!important;transform:translateY(-1px)!important;box-shadow:0 6px 20px rgba(59,130,246,.2)!important;}
+div[data-testid="stButton"]>button[kind="primary"]{background:linear-gradient(135deg,#1d4ed8,#1e40af)!important;border-color:#3b82f6!important;color:#fff!important;}
+div[data-testid="stButton"]>button[kind="primary"]:hover{background:linear-gradient(135deg,#2563eb,#1d4ed8)!important;box-shadow:0 6px 24px rgba(37,99,235,.35)!important;}
+.fb-box{border-radius:14px;padding:14px 18px;text-align:center;font-weight:600;font-size:.95rem;margin:16px 0 12px;line-height:1.5;}
+.fb-correct{background:rgba(52,211,153,.08);border:1.5px solid rgba(52,211,153,.3);color:#34d399;}
+.fb-wrong{background:rgba(239,68,68,.08);border:1.5px solid rgba(239,68,68,.3);color:#f87171;}
+.fb-done{background:rgba(251,191,36,.08);border:1.5px solid rgba(251,191,36,.3);color:#fbbf24;}
+.cds-reveal{display:flex;justify-content:center;gap:12px;margin:8px 0 16px;flex-wrap:wrap;}
+.cds-badge{padding:4px 14px;border-radius:100px;font-size:.82rem;font-weight:600;}
+.cds-winner{background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);color:#34d399;}
+.cds-loser{background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.25);color:#64748b;}
+.game-divider{border:none;border-top:1px solid #1e293b;margin:20px 0;}
+.welcome-box{text-align:center;padding:48px 24px;color:#475569;}
+.welcome-icon{font-size:3.5rem;margin-bottom:16px;}
+.welcome-text{font-size:1rem;font-weight:500;color:#64748b;}
+.welcome-sub{font-size:.83rem;color:#334155;margin-top:8px;}
+#MainMenu,footer,header{visibility:hidden;}
+.block-container{padding-top:1.5rem;padding-bottom:2rem;}
 </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def _build_iso_lookup():
-    """Build a name→iso/region lookup from default data for matching uploaded countries."""
-    return {entry["pais"].lower(): entry for entry in default_data}
+def render_flag_card(name, clickable=True, choice_key=""):
+    iso = COUNTRY_ISO.get(name, "")
+    flag_url = f"https://flagcdn.com/w160/{iso}.png" if iso else ""
+
+    if flag_url:
+        st.markdown(
+            f'<div style="width:100%;height:160px;border-radius:14px;overflow:hidden;'
+            f'box-shadow:0 6px 28px rgba(0,0,0,0.55);border:2px solid #1e293b;">'
+            f'<img src="{flag_url}" alt="{name}" style="width:100%;height:100%;object-fit:cover;display:block"></div>',
+            unsafe_allow_html=True)
+    else:
+        st.markdown(
+            '<div style="width:100%;height:160px;border-radius:14px;background:#1e293b;'
+            'display:flex;align-items:center;justify-content:center;font-size:3rem">🏳️</div>',
+            unsafe_allow_html=True)
+
+    if clickable:
+        return st.button(name, key=f"flag_btn_{choice_key}", use_container_width=True)
+    else:
+        st.markdown(
+            f'<div style="text-align:center;color:#94a3b8;font-weight:700;'
+            f'font-size:.95rem;padding:8px 0">{name}</div>',
+            unsafe_allow_html=True)
+        return False
 
 
-_ISO_LOOKUP = _build_iso_lookup()
+def render_flag_small(name):
+    iso = COUNTRY_ISO.get(name, "")
+    flag_url = f"https://flagcdn.com/w160/{iso}.png" if iso else ""
+    if flag_url:
+        st.markdown(
+            f'<div style="width:100%;height:100px;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.4)">'
+            f'<img src="{flag_url}" alt="{name}" style="width:100%;height:100%;object-fit:cover;display:block"></div>',
+            unsafe_allow_html=True)
+    else:
+        st.markdown(
+            '<div style="width:100%;height:100px;border-radius:10px;background:#1e293b;'
+            'display:flex;align-items:center;justify-content:center;font-size:2.5rem">🏳️</div>',
+            unsafe_allow_html=True)
 
 
-def _parse_excel(file_bytes: bytes) -> list:
-    """Parse an Excel file and return a list of country dicts.
+def main():
+    init_state()
+    inject_css()
 
-    Expects country names in column A and CDS values in column C.
-    """
-    df = pd.read_excel(io.BytesIO(file_bytes), header=None, engine="openpyxl")
-    countries = []
-    for _, row in df.iterrows():
-        try:
-            name = str(row.iloc[0]).strip()
-            cds_val = float(row.iloc[2])
-        except (ValueError, IndexError):
-            continue
-        if not name or name.lower() in ("nan", "país", "pais", "country"):
-            continue
-        match = _ISO_LOOKUP.get(name.lower(), {})
-        countries.append({
-            "pais": name,
-            "region": match.get("region", ""),
-            "iso": match.get("iso", ""),
-            "cds": cds_val,
-        })
-    return countries
-
-
-def get_active_data() -> list:
-    return st.session_state.get("custom_data") or default_data
-
-
-def get_random_country(exclude=None):
-    active = get_active_data()
-    options = [x for x in active if x != exclude] if exclude else active[:]
-    return random.choice(options)
-
-
-def card_html(label, country, reveal=False):
-    cds_html = f'<div class="card-cds">CDS: {country["cds"]} bps</div>' if reveal else ""
-    iso = country.get("iso", "")
-    flag_html = (
-        f'<img src="https://flagcdn.com/80x60/{iso}.png" '
-        f'     srcset="https://flagcdn.com/160x120/{iso}.png 2x" '
-        f'     width="80" height="60" alt="{country["pais"]}" '
-        f'     style="border-radius:6px; object-fit:cover;">'
-        if iso else ""
-    )
-    return f"""
-    <div class="card">
-        <div class="card-label">{label}</div>
-        <div class="card-flag">{flag_html}</div>
-        <div class="card-name">{country['pais']}</div>
-        <div class="card-region">{country.get('region','')}</div>
-        {cds_html}
-    </div>"""
-
-
-# ── Sidebar: carga de Excel ───────────────────────────────────────────────────
-with st.sidebar:
-    st.header("📂 Datos personalizados")
     st.markdown(
-        "Sube un archivo **Excel (.xlsx)** con tus propios valores de CDS:\n"
-        "- **Columna A**: nombre del país\n"
-        "- **Columna C**: valor del CDS (bps)"
-    )
-    uploaded = st.file_uploader("Seleccionar archivo .xlsx", type=["xlsx"])
+        '<div class="game-header">'
+        '<div class="game-title">¿Quién tiene mayor <span>riesgo país</span>?</div>'
+        '<div class="game-subtitle">Credit Default Swap Challenge · Posgrado en Finanzas</div>'
+        '</div>', unsafe_allow_html=True)
 
-    if uploaded is not None:
-        try:
-            parsed = _parse_excel(uploaded.read())
-            if len(parsed) < 2:
-                st.error("El archivo debe contener al menos 2 países válidos.")
+    n = len(st.session_state.df)
+    st.markdown(
+        f'<div class="score-row">'
+        f'<div class="pill pill-score">🔥 Racha: {st.session_state.score}</div>'
+        f'<div class="pill pill-best">🏆 Mejor: {st.session_state.best}</div>'
+        f'<div class="pill pill-countries">🌍 {n} países</div>'
+        f'</div>', unsafe_allow_html=True)
+
+    if st.session_state.feedback != "wrong":
+        _, cm, _ = st.columns([1, 4, 1])
+        with cm:
+            st.markdown(
+                '<div style="text-align:center;color:#475569;font-size:.72rem;'
+                'letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px">'
+                '🎵 Música del juego · haz clic en ▶</div>',
+                unsafe_allow_html=True)
+            st.audio(_mario_wav(), format="audio/wav", loop=True)
+
+    with st.sidebar:
+        st.markdown("### 📂 Datos")
+        st.caption("Sube tu propio archivo Excel con CDS actualizados")
+        up = st.file_uploader("Excel (col A=País, col C=CDS)", type=["xlsx"], label_visibility="collapsed")
+        if up:
+            dfn = load_excel(up)
+            if dfn is not None:
+                st.session_state.df = dfn
+                reset_game(); advance()
+                st.success(f"✅ {len(dfn)} países cargados"); st.rerun()
+        st.divider()
+        if st.checkbox("📊 Ranking CDS"):
+            d = st.session_state.df.copy(); d.columns = ["País","CDS (pb)"]
+            st.dataframe(d.sort_values("CDS (pb)",ascending=False).reset_index(drop=True),
+                         hide_index=True, use_container_width=True, height=480)
+        st.divider()
+        st.caption("**CDS** = Credit Default Swap. Mayor CDS = Mayor riesgo soberano.")
+
+    c1, c2, c3 = st.columns([2, 3, 2])
+    with c2:
+        label = "🎮 Nuevo juego" if st.session_state.game_started else "▶️ Iniciar juego"
+        if st.button(label, type="primary", use_container_width=True):
+            reset_game(); advance(); st.rerun()
+
+    if st.session_state.game_started and not st.session_state.game_over:
+        pair = st.session_state.current_pair
+        if not pair:
+            return
+        df = st.session_state.df
+        ia, ib = pair
+        ca, cb = df.loc[ia,"Pais"], df.loc[ib,"Pais"]
+        cds_a, cds_b = df.loc[ia,"CDS"], df.loc[ib,"CDS"]
+
+        st.markdown('<hr class="game-divider">', unsafe_allow_html=True)
+        st.markdown('<div class="question-label">¿Cuál tiene el CDS más alto? — haz clic en la bandera</div>', unsafe_allow_html=True)
+
+        col_a, col_vs, col_b = st.columns([5, 1, 5])
+        with col_a:
+            clicked_a = render_flag_card(ca, clickable=st.session_state.round_active, choice_key="a")
+        with col_vs:
+            st.markdown('<div class="vs-divider"><div class="vs-line"></div><div class="vs-text">VS</div><div class="vs-line"></div></div>', unsafe_allow_html=True)
+        with col_b:
+            clicked_b = render_flag_card(cb, clickable=st.session_state.round_active, choice_key="b")
+
+        if st.session_state.round_active and (clicked_a or clicked_b):
+            correct = ca if cds_a > cds_b else cb
+            chosen = ca if clicked_a else cb
+            if chosen == correct:
+                st.session_state.score += 1
+                st.session_state.best = max(st.session_state.best, st.session_state.score)
+                st.session_state.feedback = "correct"
             else:
-                if st.session_state.get("custom_data") != parsed:
-                    st.session_state.custom_data = parsed
-                    # Reset game when new data is loaded
-                    for key in ("phase", "score", "high_score",
-                                "country_a", "country_b",
-                                "last_a", "last_b", "next_b", "correct"):
-                        st.session_state.pop(key, None)
-                    st.rerun()
-                st.success(f"✅ {len(parsed)} países cargados desde Excel.")
-        except Exception as e:
-            st.error(f"Error al leer el archivo: {e}")
-
-    if st.session_state.get("custom_data"):
-        if st.button("🔄 Usar datos por defecto", use_container_width=True):
-            st.session_state.custom_data = None
-            for key in ("phase", "score", "high_score",
-                        "country_a", "country_b",
-                        "last_a", "last_b", "next_b", "correct"):
-                st.session_state.pop(key, None)
+                st.session_state.feedback = "wrong"
+                st.session_state.game_over = True
+            st.session_state.correct_country = correct
+            st.session_state.round_active = False
             st.rerun()
-        st.caption(f"Usando {len(st.session_state.custom_data)} países del Excel.")
-    else:
-        st.caption(f"Usando {len(default_data)} países por defecto.")
+
+        if st.session_state.feedback == "correct":
+            cn = st.session_state.correct_country
+            c_cds = df.loc[df["Pais"]==cn,"CDS"].values[0]
+            ot = cb if cn==ca else ca
+            o_cds = df.loc[df["Pais"]==ot,"CDS"].values[0]
+            st.markdown(f'<div class="fb-box fb-correct">✅ ¡Correcto! <b>{cn}</b> tiene mayor riesgo soberano</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="cds-reveal"><div class="cds-badge cds-winner">🔴 {cn}: {c_cds:,.1f} pb</div><div class="cds-badge cds-loser">⚪ {ot}: {o_cds:,.1f} pb</div></div>', unsafe_allow_html=True)
+            _, cn2, _ = st.columns([2, 3, 2])
+            with cn2:
+                if st.button("Siguiente →", type="primary", use_container_width=True):
+                    advance(); st.rerun()
+
+    if st.session_state.game_over:
+        fb = st.session_state.feedback
+        sc = st.session_state.score
+        bst = st.session_state.best
+        pair = st.session_state.current_pair
+        df = st.session_state.df
+
+        if fb == "completed":
+            st.markdown(f'<div class="fb-box fb-done">🎉 ¡Completaste todos los pares! · Racha: <b>{sc}</b> · Récord: <b>{bst}</b></div>', unsafe_allow_html=True)
+        elif fb == "wrong" and pair:
+            ia, ib = pair
+            ca, cb = df.loc[ia,"Pais"], df.loc[ib,"Pais"]
+            cds_a, cds_b = df.loc[ia,"CDS"], df.loc[ib,"CDS"]
+            cn = st.session_state.correct_country
+            c_cds = df.loc[df["Pais"]==cn,"CDS"].values[0]
+            ot = cb if cn==ca else ca
+            o_cds = df.loc[df["Pais"]==ot,"CDS"].values[0]
+            st.markdown(f'<div class="fb-box fb-wrong">❌ Racha detenida en <b>{sc}</b> acierto{"s" if sc!=1 else ""}<br><small>Respuesta correcta: <b>{cn}</b> ({c_cds:,.1f} pb) vs {ot} ({o_cds:,.1f} pb)</small></div>', unsafe_allow_html=True)
+            _go_b64 = base64.b64encode(_gameover_wav()).decode()
+            components.html(f"""<script>
+try {{ parent.document.querySelectorAll('audio').forEach(function(a){{ a.pause(); a.currentTime=0; }}); }} catch(e) {{}}
+var _go=new Audio('data:audio/wav;base64,{_go_b64}'); _go.play();
+</script>""", height=0, scrolling=False)
+            st.markdown("<br>", unsafe_allow_html=True)
+            a2, v2, b2 = st.columns([5, 1, 5])
+            with a2:
+                render_flag_small(ca)
+                col = "#f87171" if ca!=cn else "#34d399"
+                st.markdown(f"<div style='text-align:center;font-weight:700;color:{col};font-size:.9rem;margin-top:8px'>{ca}<br><span style='font-size:.78rem;opacity:.7'>{cds_a:,.1f} pb</span></div>", unsafe_allow_html=True)
+            with v2:
+                st.markdown('<div class="vs-divider"><div class="vs-line"></div><div class="vs-text">VS</div><div class="vs-line"></div></div>', unsafe_allow_html=True)
+            with b2:
+                render_flag_small(cb)
+                col = "#f87171" if cb!=cn else "#34d399"
+                st.markdown(f"<div style='text-align:center;font-weight:700;color:{col};font-size:.9rem;margin-top:8px'>{cb}<br><span style='font-size:.78rem;opacity:.7'>{cds_b:,.1f} pb</span></div>", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        _, cb2, _ = st.columns([2, 3, 2])
+        with cb2:
+            if st.button("🔄 Jugar de nuevo", type="primary", use_container_width=True):
+                reset_game(); advance(); st.rerun()
+
+    elif not st.session_state.game_started:
+        st.markdown(
+            '<div class="welcome-box"><div class="welcome-icon">🎯</div>'
+            '<div class="welcome-text">Presiona <b>Iniciar juego</b> para comenzar</div>'
+            '<div class="welcome-sub">86 países · Datos reales de CDS · Bloomberg</div>'
+            '</div>', unsafe_allow_html=True)
 
 
-# ── Estado inicial ────────────────────────────────────────────────────────────
-def _init():
-    if "phase" not in st.session_state:
-        a = get_random_country()
-        b = get_random_country(exclude=a)
-        st.session_state.update(
-            phase="playing",
-            score=0,
-            high_score=0,
-            country_a=a,
-            country_b=b,
-            last_a=None,
-            last_b=None,
-            next_b=None,
-            correct=None,
-        )
-
-_init()
-
-
-# ── Callbacks ─────────────────────────────────────────────────────────────────
-def handle_guess(choice):
-    a, b = st.session_state.country_a, st.session_state.country_b
-    a_cds, b_cds = float(a["cds"]), float(b["cds"])
-    is_correct = (choice == "A" and a_cds > b_cds) or (choice == "B" and b_cds >= a_cds)
-
-    st.session_state.last_a = a
-    st.session_state.last_b = b
-    st.session_state.correct = is_correct
-
-    if is_correct:
-        st.session_state.score += 1
-        if st.session_state.score > st.session_state.high_score:
-            st.session_state.high_score = st.session_state.score
-        st.session_state.next_b = get_random_country(exclude=b)
-        st.session_state.phase = "result_correct"
-    else:
-        st.session_state.phase = "game_over"
-
-
-def handle_next():
-    st.session_state.country_a = st.session_state.last_b
-    st.session_state.country_b = st.session_state.next_b
-    st.session_state.phase = "playing"
-
-
-def handle_replay():
-    a = get_random_country()
-    b = get_random_country(exclude=a)
-    st.session_state.update(
-        phase="playing",
-        score=0,
-        country_a=a,
-        country_b=b,
-        last_a=None,
-        last_b=None,
-        next_b=None,
-        correct=None,
-    )
-
-
-# ── Render ────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="title-block">
-    <h1>📊 CDS GAME</h1>
-    <p>Riesgo crediticio soberano — Credit Default Swaps</p>
-</div>""", unsafe_allow_html=True)
-
-st.markdown(f"""
-<div class="score-row">
-    <div class="score-chip">Puntos&nbsp;<span class="val">{st.session_state.score}</span></div>
-    <div class="score-chip">Récord&nbsp;<span class="val2">{st.session_state.high_score}</span></div>
-</div>""", unsafe_allow_html=True)
-
-phase = st.session_state.phase
-
-# ─── JUGANDO ──────────────────────────────────────────────────────────────────
-if phase == "playing":
-    st.markdown(
-        '<p class="question">¿Cuál país tiene <strong>MAYOR</strong> riesgo crediticio?</p>',
-        unsafe_allow_html=True,
-    )
-
-    col_a, col_vs, col_b = st.columns([5, 1, 5])
-    with col_a:
-        st.markdown(card_html("PAÍS A", st.session_state.country_a), unsafe_allow_html=True)
-    with col_vs:
-        st.markdown('<div class="vs-wrap"><div class="vs-text">VS</div></div>', unsafe_allow_html=True)
-    with col_b:
-        st.markdown(card_html("PAÍS B", st.session_state.country_b), unsafe_allow_html=True)
-
-    st.write("")
-    btn_a, btn_b = st.columns(2)
-    with btn_a:
-        st.button("🔴 A tiene más riesgo", use_container_width=True,
-                  on_click=handle_guess, args=("A",), type="primary")
-    with btn_b:
-        st.button("🔴 B tiene más riesgo", use_container_width=True,
-                  on_click=handle_guess, args=("B",), type="primary")
-
-# ─── CORRECTO ─────────────────────────────────────────────────────────────────
-elif phase == "result_correct":
-    a, b = st.session_state.last_a, st.session_state.last_b
-    winner = a if float(a["cds"]) > float(b["cds"]) else b
-
-    st.markdown(
-        '<p class="question">Resultado de la ronda</p>',
-        unsafe_allow_html=True,
-    )
-
-    col_a, col_vs, col_b = st.columns([5, 1, 5])
-    with col_a:
-        st.markdown(card_html("PAÍS A", a, reveal=True), unsafe_allow_html=True)
-    with col_vs:
-        st.markdown('<div class="vs-wrap"><div class="vs-text">VS</div></div>', unsafe_allow_html=True)
-    with col_b:
-        st.markdown(card_html("PAÍS B", b, reveal=True), unsafe_allow_html=True)
-
-    st.markdown(f"""
-    <div class="fb-correct">
-        ✅ ¡CORRECTO!
-        <div class="fb-detail">
-            <strong>{winner['pais']}</strong> tiene el CDS más alto
-            &nbsp;({winner['cds']} bps)
-        </div>
-    </div>""", unsafe_allow_html=True)
-
-    st.write("")
-    st.button("▶ Siguiente ronda", use_container_width=True,
-              on_click=handle_next, type="primary")
-
-# ─── GAME OVER ────────────────────────────────────────────────────────────────
-elif phase == "game_over":
-    a, b = st.session_state.last_a, st.session_state.last_b
-    winner = a if float(a["cds"]) > float(b["cds"]) else b
-
-    col_a, col_vs, col_b = st.columns([5, 1, 5])
-    with col_a:
-        st.markdown(card_html("PAÍS A", a, reveal=True), unsafe_allow_html=True)
-    with col_vs:
-        st.markdown('<div class="vs-wrap"><div class="vs-text">VS</div></div>', unsafe_allow_html=True)
-    with col_b:
-        st.markdown(card_html("PAÍS B", b, reveal=True), unsafe_allow_html=True)
-
-    st.markdown(f"""
-    <div class="fb-wrong">
-        ❌ INCORRECTO
-        <div class="fb-detail">
-            <strong>{winner['pais']}</strong> tenía el CDS más alto
-            &nbsp;({winner['cds']} bps)
-        </div>
-    </div>""", unsafe_allow_html=True)
-
-    is_new_record = st.session_state.score > 0 and st.session_state.score == st.session_state.high_score
-    hs_html = (
-        '<div class="go-hs">🏆 ¡Nuevo récord!</div>'
-        if is_new_record else ""
-    )
-    st.markdown(f"""
-    <div class="go-box">
-        <h2>JUEGO TERMINADO</h2>
-        <div class="go-score">{st.session_state.score}</div>
-        <div class="go-label">puntos</div>
-        {hs_html}
-        <div class="go-tip">Récord de sesión: {st.session_state.high_score} puntos</div>
-    </div>""", unsafe_allow_html=True)
-
-    st.button("🔄 Jugar de nuevo", use_container_width=True,
-              on_click=handle_replay, type="primary")
-
-# ─── Info pie de página ───────────────────────────────────────────────────────
-with st.expander("ℹ️ ¿Qué es el CDS?"):
-    st.markdown(
-        """
-        Un **Credit Default Swap (CDS)** es un instrumento financiero que funciona como un
-        seguro contra el incumplimiento de pago de un país (deuda soberana).
-        Se mide en **puntos base (bps)** — cuanto mayor el valor, mayor el riesgo percibido
-        por los mercados financieros.
-
-        *Los valores mostrados son aproximados y de carácter educativo.*
-        """
-    )
+if __name__ == "__main__":
+    main()
