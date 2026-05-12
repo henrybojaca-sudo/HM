@@ -37,35 +37,35 @@ COUNTRY_ISO = {
 }
 
 DEFAULT_DATA = [
-    ("Estados Unidos",38.73),("Brasil",133.76),("Colombia",228.29),
-    ("Chile",51.69),("México",91.32),("Panamá",116.45),
-    ("Perú",74.00),("Argentina",565.16),("Ecuador",432.57),
-    ("Costa Rica",155.35),("Canadá",19.54),("El Salvador",283.89),
-    ("Guatemala",157.60),("Uruguay",61.38),("Nicaragua",479.35),
-    ("Reino Unido",17.96),("Francia",28.24),("Alemania",9.10),
-    ("Italia",28.72),("España",18.63),("Portugal",17.78),
-    ("Suecia",8.27),("Países Bajos",7.78),("Suiza",13.55),
-    ("Grecia",29.37),("Austria",14.70),("Bélgica",17.05),
-    ("Bulgaria",53.62),("Croacia",61.07),("Dinamarca",8.75),
-    ("Egipto",345.72),("Finlandia",13.63),("Hungría",103.29),
-    ("Israel",87.49),("Kazajistán",94.19),("Polonia",63.62),
-    ("Qatar",41.92),("Rumanía",136.76),("Eslovaquia",40.39),
-    ("Sudáfrica",152.82),("Checa",30.31),("Eslovenia",35.43),
-    ("Letonia",56.71),("Lituania",59.50),("Estonia",67.60),
-    ("Serbia",146.45),("Bahrein",255.17),("Nigeria",327.19),
-    ("Argelia",91.67),("Irak",298.02),("Chipre",48.62),
-    ("Dubai",66.18),("Irlanda",16.49),("Noruega",9.07),
-    ("Arabia Saudita",84.83),("Kuwait",62.19),("Omán",90.34),
-    ("Tunisia",715.47),("Turquía",252.87),("Islanda",36.78),
-    ("Abu Dhabi",43.14),("Marruecos",86.40),("Ghana",361.73),
-    ("Gabón",760.72),("Kenia",401.32),("Angola",572.79),
-    ("Camerún",640.01),("Ruanda",378.01),("Senegal",1084.97),
-    ("Zambia",368.87),("Etiopía",3432.69),("Namibia",297.74),
-    ("Japón",26.87),("Australia",14.67),("N. Zelanda",14.69),
-    ("Sur Corea",27.18),("China",46.74),("Hong Kong",28.64),
-    ("India",58.63),("Indonesia",88.89),("Malasia",44.57),
-    ("Filipinas",68.13),("Pakistán",519.72),("Tailandia",46.82),
-    ("Vietnam",87.35),("Mongolia",232.40),
+    ("Estados Unidos",40.33),("Brasil",125.10),("Colombia",219.29),
+    ("México",93.33),("Argentina",598.67),("Chile",51.01),
+    ("Perú",74.16),("Panamá",101.00),("Canadá",17.70),
+    ("Ecuador",402.64),("Uruguay",56.16),("Costa Rica",129.29),
+    ("El Salvador",320.90),("Guatemala",120.74),("Nicaragua",450.27),
+    ("Reino Unido",20.56),("Francia",30.05),("Alemania",9.74),
+    ("Italia",32.22),("España",18.43),("Portugal",17.60),
+    ("Suecia",8.87),("Países Bajos",9.37),("Suiza",12.77),
+    ("Grecia",31.75),("Turquía",235.81),("Arabia Saudita",63.78),
+    ("Egipto",326.35),("Sudáfrica",150.47),("Bahrein",252.32),
+    ("Abu Dhabi",43.59),("Rumanía",163.79),("Qatar",35.05),
+    ("Israel",68.37),("Dubai",84.91),("Hungría",82.24),
+    ("Nigeria",273.51),("Polonia",56.42),("Omán",69.51),
+    ("Kuwait",59.86),("Bélgica",19.98),("Kenia",451.90),
+    ("Serbia",147.60),("Kazajistán",76.02),("Checa",34.02),
+    ("Marruecos",74.83),("Angola",408.76),("Bulgaria",53.54),
+    ("Eslovaquia",46.71),("Croacia",56.71),("Irlanda",16.85),
+    ("Eslovenia",41.64),("Austria",13.30),("Dinamarca",9.85),
+    ("Noruega",8.73),("Irak",436.62),("Ghana",342.14),
+    ("Senegal",1165.41),("Lituania",57.85),("Estonia",71.36),
+    ("Finlandia",13.60),("Letonia",60.54),("Argelia",88.89),
+    ("Etiopía",3425.68),("Chipre",47.69),("Tunisia",691.23),
+    ("Zambia",360.95),("Islanda",42.51),("Ruanda",307.20),
+    ("Camerún",514.22),("Gabón",687.93),("Namibia",280.26),
+    ("Japón",27.80),("Australia",14.66),("N. Zelanda",16.86),
+    ("Sur Corea",27.48),("Indonesia",86.78),("China",42.76),
+    ("Filipinas",76.97),("India",57.76),("Malasia",36.85),
+    ("Hong Kong",27.21),("Tailandia",52.60),("Pakistán",452.13),
+    ("Vietnam",95.37),("Mongolia",212.23),
 ]
 
 NON_COUNTRIES = {"América","EMEA","Asia/Pacífico","Name"}
@@ -146,11 +146,11 @@ def load_excel(f):
             if name in NON_COUNTRIES or name == "nan":
                 continue
             try:
-                rows.append((name, round(float(row[2]), 2)))
+                rows.append((name, round(float(row[1]), 2)))
             except (TypeError, ValueError, IndexError):
                 continue
         if len(rows) < 2:
-            st.error("Necesitas al menos 2 países con CDS en columna C.")
+            st.error("Necesitas al menos 2 países con CDS en columna B.")
             return None
         return pd.DataFrame(rows, columns=["Pais","CDS"]).reset_index(drop=True)
     except Exception as e:
@@ -327,7 +327,7 @@ def main():
     with st.sidebar:
         st.markdown("### 📂 Datos")
         st.caption("Sube tu propio archivo Excel con CDS actualizados")
-        up = st.file_uploader("Excel (col A=País, col C=CDS)", type=["xlsx"], label_visibility="collapsed")
+        up = st.file_uploader("Excel (col A=País, col B=CDS)", type=["xlsx"], label_visibility="collapsed")
         if up:
             dfn = load_excel(up)
             if dfn is not None:
